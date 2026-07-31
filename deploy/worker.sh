@@ -21,7 +21,7 @@ echo "Deploying ${SERVICE} service..."
 docker pull ${IMAGE}:${TAG}
 
 # Recreate only the Worker service
-docker compose up -d --no-deps ${SERVICE}
+docker compose -f worker/docker-compose.yml up -d
 
 # Wait for the service to start
 sleep 10
