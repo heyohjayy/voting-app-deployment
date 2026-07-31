@@ -1,0 +1,11 @@
+services:
+  worker:
+    build:
+      context: .
+    image: worker:1.0
+    container_name: worker
+
+networks:
+  default:
+    name: tenet
+    external: true

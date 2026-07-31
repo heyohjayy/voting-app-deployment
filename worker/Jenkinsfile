@@ -1,0 +1,123 @@
+pipeline {
+    agent any
+
+    // Define environment variables used throughout the pipeline
+    environment {
+        IMAGE_NAME = "ohjayy/worker"
+        SLACK_CHANNEL = "#jenkins-builds"
+    }
+
+    stages {
+
+        // Retrieve the latest source code from GitHub
+        stage('Checkout Source') {
+            steps {
+                checkout scm
+            }
+        }
+
+        // Get the short Git commit SHA for image versioning
+        stage('Get Git Commit SHA') {
+            steps {
+                script {
+                    env.COMMIT_SHA = sh(
+                        script: 'git rev-parse --short HEAD',
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Commit SHA: ${env.COMMIT_SHA}"
+                }
+            }
+        }
+
+        // Build the Worker Docker image
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker compose -f worker/docker-compose.yml build'
+            }
+        }
+
+        // Tag the image with the current Git commit SHA
+        stage('Tag Docker Image') {
+            steps {
+                sh """
+                docker tag ${IMAGE_NAME}:latest ${IMAGE_NAME}:${COMMIT_SHA}
+                """
+            }
+        }
+
+        // Log in to Docker Hub using Jenkins credentials
+        stage('Docker Hub Login') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-credentials',
+                    usernameVariable: 'DOCKER_USERNAME',
+                    passwordVariable: 'DOCKER_PASSWORD'
+                )]) {
+                    sh '''
+                    echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+                    '''
+                }
+            }
+        }
+
+        // Push the tagged image to Docker Hub
+        stage('Push Docker Image') {
+            steps {
+                sh """
+                docker push ${IMAGE_NAME}:${COMMIT_SHA}
+                """
+            }
+        }
+
+        // Log out of Docker Hub
+        stage('Docker Hub Logout') {
+            steps {
+                sh 'docker logout'
+            }
+        }
+
+        // Deploy the new image to the target server
+        stage('Deploy Worker Service') {
+            steps {
+                sh 'bash deploy/worker.sh'
+            }
+        }
+    }
+
+    // Send a Slack notification when the pipeline completes
+    post {
+
+        // Always run at the end of the pipeline
+        always {
+            echo "Pipeline execution completed."
+        }
+
+        // Notify Slack if the pipeline succeeds
+        success {
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'good',
+                message: "✅ *SUCCESS* - ${env.JOB_NAME} #${env.BUILD_NUMBER}\nRepository: ${env.JOB_NAME}\nBranch: ${env.BRANCH_NAME}\nBuild URL: ${env.BUILD_URL}"
+            )
+        }
+
+        // Notify Slack if the pipeline fails
+        failure {
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'danger',
+                message: "❌ *FAILED* - ${env.JOB_NAME} #${env.BUILD_NUMBER}\nRepository: ${env.JOB_NAME}\nBranch: ${env.BRANCH_NAME}\nBuild URL: ${env.BUILD_URL}"
+            )
+        }
+
+        // Notify Slack if the pipeline is aborted
+        aborted {
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'warning',
+                message: "⚠️ *ABORTED* - ${env.JOB_NAME} #${env.BUILD_NUMBER}"
+            )
+        }
+    }
+}

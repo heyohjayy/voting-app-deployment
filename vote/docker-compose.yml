@@ -1,0 +1,13 @@
+services:
+  vote:
+    build:
+      context: .
+    image: vote:1.0
+    container_name: vote
+    ports:
+      - "8080:80"
+
+networks:
+  default:
+    name: tenet
+    external: true
