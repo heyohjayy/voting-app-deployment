@@ -2,7 +2,7 @@ services:
   result:
     build:
       context: .
-    image: result:1.0
+    image: ohjayy/result:latest
     container_name: result
     ports:
       - "8081:80"

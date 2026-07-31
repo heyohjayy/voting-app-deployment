@@ -2,7 +2,7 @@ services:
   worker:
     build:
       context: .
-    image: worker:1.0
+    image: ohjayy/worker:latest
     container_name: worker
 
 networks:
