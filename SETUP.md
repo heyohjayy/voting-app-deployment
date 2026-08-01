@@ -674,9 +674,25 @@ Create the Dockerfile.
 vi Dockerfile.jenkins
 ```
 
-Copy the Dockerfile from this repository.
+Paste the following Dockerfile.
 
-- [`Dockerfile.jenkins`](Dockerfile.jenkins)
+```dockerfile
+FROM jenkins/jenkins:lts-jdk21
+USER root
+RUN apt-get update && apt-get install -y ca-certificates curl \
+ && install -m 0755 -d /etc/apt/keyrings \
+ && curl -fsSL https://download.docker.com/linux/debian/gpg \
+      -o /etc/apt/keyrings/docker.asc \
+ && echo "deb [signed-by=/etc/apt/keyrings/docker.asc] \
+      https://download.docker.com/linux/debian $(. /etc/os-release; echo $VERSION_CODENAME) stable" \
+      > /etc/apt/sources.list.d/docker.list \
+ && apt-get update \
+ && apt-get install -y docker-ce-cli docker-compose-plugin \
+ && rm -rf /var/lib/apt/lists/*
+USER jenkins
+```
+
+Save and exit the file.
 
 Build the custom Jenkins Controller image.
 
@@ -818,9 +834,17 @@ Create the Build Agent Dockerfile.
 vi Dockerfile.agent
 ```
 
-Copy the Dockerfile from this repository.
+Paste the following Dockerfile.
 
-- [`Dockerfile.agent`](Dockerfile.agent)
+```dockerfile
+FROM jenkins/inbound-agent:latest
+USER root
+COPY --from=docker:cli /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=docker:cli /usr/local/libexec/docker/cli-plugins /usr/local/libexec/docker/cli-plugins
+USER jenkins
+```
+
+Save and exit the file.
 
 Build the Jenkins Build Agent image.
 
