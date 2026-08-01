@@ -169,7 +169,7 @@ newgrp docker
 
 Confirm that Docker has been installed successfully.
 
-![Docker Installed](../screenshots/01-docker-installed.png)
+![Docker Installed](screenshots/01-docker-installed.png)
 
 ## 4. Build the Application Docker Images
 
@@ -243,7 +243,7 @@ Expected output should include:
 - worker:1.0
 - result:1.0
 
-![Docker Images Built](../screenshots/02-docker-app-image-build.png)
+![Docker Images Built](screenshots/02-docker-app-image-build.png)
 
 ## 5. Create the Docker Network
 
@@ -269,7 +269,7 @@ docker network ls
 
 Ensure the **tenet** bridge network appears in the output.
 
-![Docker Network Created](../screenshots/03-docker-network-bridge-network.png)
+![Docker Network Created](screenshots/03-docker-network-bridge-network.png)
 
 ## 6. Deploy Redis and PostgreSQL
 
@@ -308,7 +308,7 @@ docker ps
 
 Ensure both **db** and **redis** are running.
 
-![Redis and PostgreSQL Running](../screenshots/04-docker-run-redis-db.png)
+![Redis and PostgreSQL Running](screenshots/04-docker-run-redis-db.png)
 
 ## 7. Deploy the Application Services
 
@@ -359,7 +359,7 @@ The output should display the following containers:
 
 ### Verification
 
-![Application Containers Running](../screenshots/05-docker-run-app-services.png)
+![Application Containers Running](screenshots/05-docker-run-app-services.png)
 
 ## 8. Verify the Complete Application
 
@@ -389,7 +389,7 @@ This confirms that:
 
 ### Verification
 
-![Live Voting Application](../screenshots/06-live-vote-result-app.png)
+![Live Voting Application](screenshots/06-live-vote-result-app.png)
 
 ## 9. Remove the Containers and Images
 
@@ -421,7 +421,7 @@ docker images
 
 ### Verification
 
-![Containers and Images Removed](../screenshots/07-images-container-deleted.png)
+![Containers and Images Removed](screenshots/07-images-container-deleted.png)
 
 At this point, you have successfully completed the manual deployment of the application. More importantly, you now understand how each service is built, how the containers communicate over a shared Docker network, and how the complete application functions before introducing Docker Compose and CI/CD automation.
 
@@ -484,7 +484,7 @@ Ensure that persistent volumes are configured for the database services as shown
 >
 > The complete `docker-compose.yml` used throughout this project is available here:
 >
-> - [`docker-compose.yml`](../docker-compose.yml)
+> - [`docker-compose.yml`](docker-compose.yml)
 
 Using Docker volumes provides several benefits:
 
@@ -494,7 +494,7 @@ Using Docker volumes provides several benefits:
 
 Verify that the Docker Compose file includes the required volume configuration.
 
-![Docker Compose Volume Mount](../screenshots/09-dockercompose-volume-mount.png)
+![Docker Compose Volume Mount](screenshots/09-dockercompose-volume-mount.png)
 
 ## 12. Create the Service-Specific Docker Compose Files
 
@@ -510,9 +510,9 @@ result/docker-compose.yml
 
 Copy the corresponding configurations from this repository:
 
-- [`vote/docker-compose.yml`](../vote/docker-compose.yml)
-- [`worker/docker-compose.yml`](../worker/docker-compose.yml)
-- [`result/docker-compose.yml`](../result/docker-compose.yml)
+- [`vote/docker-compose.yml`](vote/docker-compose.yml)
+- [`worker/docker-compose.yml`](worker/docker-compose.yml)
+- [`result/docker-compose.yml`](result/docker-compose.yml)
 
 This design allows Jenkins to deploy only the modified service during the CI/CD process while Redis, PostgreSQL, and the remaining application services continue running without interruption.
 
@@ -578,7 +578,7 @@ http://<EC2_PUBLIC_IP>:8081
 
 Cast several votes and confirm that the Result application updates accordingly.
 
-![Docker Compose Deployment](../screenshots/10-docker-compose-up.png)
+![Docker Compose Deployment](screenshots/10-docker-compose-up.png)
 
 ## 14. Push Each Service Image to Docker Hub
 
@@ -646,11 +646,11 @@ These images will serve as the deployment artifacts used throughout the CI/CD im
 
 Docker Hub authentication.
 
-![Docker Registry Personal Access Token](../screenshots/10--docker-registry-PAT.png)
+![Docker Registry Personal Access Token](screenshots/10--docker-registry-PAT.png)
 
 Docker image tagging.
 
-![Docker Image Tagging](../screenshots/11-docker-tag.png)
+![Docker Image Tagging](screenshots/11-docker-tag.png)
 
 # Phase 3 – Jenkins Infrastructure
 
@@ -676,7 +676,7 @@ vi Dockerfile.jenkins
 
 Copy the Dockerfile from this repository.
 
-- [`Dockerfile.jenkins`](../Dockerfile.jenkins)
+- [`Dockerfile.jenkins`](Dockerfile.jenkins)
 
 Build the custom Jenkins Controller image.
 
@@ -696,7 +696,7 @@ You should see:
 jenkins-docker   1.0
 ```
 
-![Jenkins Docker CLI Image](../screenshots/12-docker-jenkins-cli.png)
+![Jenkins Docker CLI Image](screenshots/12-docker-jenkins-cli.png)
 
 ## 16. Deploy the Jenkins Controller Container
 
@@ -731,7 +731,7 @@ docker ps
 
 The output should include the **jenkins** container.
 
-![Jenkins Controller Container](../screenshots/13-jenkins-container.png)
+![Jenkins Controller Container](screenshots/13-jenkins-container.png)
 
 Open your browser and access the Jenkins web interface.
 
@@ -749,7 +749,7 @@ docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 
 Copy the generated password, paste it into the Unlock Jenkins page, and continue with the installation.
 
-![Jenkins Welcome Page](../screenshots/13-jenkins-container+UI-welcomepage.png)
+![Jenkins Welcome Page](screenshots/13-jenkins-container+UI-welcomepage.png)
 
 Select **Install Suggested Plugins** and wait for Jenkins to complete the installation.
 
@@ -757,7 +757,7 @@ Create your administrator account and complete the initial setup wizard.
 
 After logging in successfully, the Jenkins dashboard should be displayed.
 
-![Jenkins Welcome Page](../screenshots/14-jenkinsUI-welcomepage.png)
+![Jenkins Welcome Page](screenshots/14-jenkinsUI-welcomepage.png)
 
 ## 17. Configure Jenkins
 
@@ -792,13 +792,13 @@ Configure the agent using the following settings.
 | Availability | `Keep this agent online as much as possible` |
 | Node Properties | Leave unchecked |
 
-![Jenkins Agent Setup](../screenshots/15-jenkins-agent-setup.png)
+![Jenkins Agent Setup](screenshots/15-jenkins-agent-setup.png)
 
 After completing the configuration, click **Save**.
 
 You will be redirected to the **Nodes** page, where the newly created build agent should now appear.
 
-![Jenkins Nodes](../screenshots/16-jenkins-nodes.png)
+![Jenkins Nodes](screenshots/16-jenkins-nodes.png)
 
 Next, click on the **build-agent** node.
 
@@ -820,7 +820,7 @@ vi Dockerfile.agent
 
 Copy the Dockerfile from this repository.
 
-- [`Dockerfile.agent`](../Dockerfile.agent)
+- [`Dockerfile.agent`](Dockerfile.agent)
 
 Build the Jenkins Build Agent image.
 
@@ -840,7 +840,7 @@ The output should include:
 jenkins-agent    1.0
 ```
 
-![Jenkins Agent Build](../screenshots/17-jenkins-agent.png)
+![Jenkins Agent Build](screenshots/17-jenkins-agent.png)
 
 Next, start the Jenkins Build Agent container.
 
@@ -866,7 +866,7 @@ Verify that the Build Agent container is running.
 docker ps
 ```
 
-![Jenkins Agent Container](../screenshots/18-jenkins-agent-container.png)
+![Jenkins Agent Container](screenshots/18-jenkins-agent-container.png)
 
 Return to the Jenkins Dashboard.
 
@@ -879,7 +879,7 @@ Manage Jenkins
 
 The **build-agent** should now display an **Online** status, confirming that it has successfully connected to the Jenkins Controller.
 
-![Jenkins Agent Online](../screenshots/19-jenkins-agent-online.png)
+![Jenkins Agent Online](screenshots/19-jenkins-agent-online.png)
 
 ## 19. Configure Jenkins for Pipeline Execution
 
@@ -923,7 +923,7 @@ Install the plugin and restart Jenkins if prompted.
 
 The Pipeline Stage View plugin provides a visual representation of every stage within a Jenkins pipeline, making it easier to monitor build progress, identify failures, and troubleshoot CI/CD workflows.
 
-![Pipeline Stage View Plugin](../screenshots/20-pipeline-stage-install.png)
+![Pipeline Stage View Plugin](screenshots/20-pipeline-stage-install.png)
 
 # Phase 4 – Repository Preparation & CI/CD Pipelines
 
@@ -1005,12 +1005,15 @@ touch Jenkinsfile
 Verify the updated project structure.
 
 ```bash
-tree    tree -L 2    tree -d    ls -l
+tree
+tree -L 2
+tree -d
+ls -l
 ```
 
 The project structure should now resemble the following.
 
-![Repository Structure](../screenshots/21-project-restructure.png)
+![Repository Structure](screenshots/21-project-restructure.png)
 
 ## 21. Configure the Deployment Scripts
 
@@ -1044,7 +1047,7 @@ vi vote.sh
 
 Copy the deployment script from:
 
-- [`deploy/vote.sh`](../deploy/vote.sh)
+- [`deploy/vote.sh`](deploy/vote.sh)
 
 Create the rollback script.
 
@@ -1054,7 +1057,7 @@ vi rollback.sh
 
 Copy the rollback script from:
 
-- [`deploy/rollback.sh`](../deploy/rollback.sh)
+- [`deploy/rollback.sh`](deploy/rollback.sh)
 
 Make both scripts executable.
 
@@ -1087,7 +1090,7 @@ vi Jenkinsfile
 
 Copy the pipeline from:
 
-- [`vote/Jenkinsfile`](../vote/Jenkinsfile)
+- [`vote/Jenkinsfile`](vote/Jenkinsfile)
 
 ### Create the Jenkins Pipeline Job
 
@@ -1142,7 +1145,8 @@ to
 ```text
 Pipeline script from SCM
 ```
-![Pipeline General Configuration](../screenshots/22-pipeline-job-configuration-general.png)
+
+![Pipeline General Configuration](screenshots/22-pipeline-job-configuration-general.png)
 
 Configure the SCM settings.
 
@@ -1176,7 +1180,7 @@ Select **github-credentials** from the Credentials dropdown.
 
 The completed configuration should resemble the image below.
 
-![Pipeline SCM Configuration](../screenshots/24-worker-pipeline-configuration.png)
+![Pipeline SCM Configuration](screenshots/24-worker-pipeline-configuration.png)
 
 ### Configure Docker Hub Credentials
 
@@ -1219,7 +1223,7 @@ vi Jenkinsfile
 
 Copy the pipeline from:
 
-- [`worker/Jenkinsfile`](../worker/Jenkinsfile)
+- [`worker/Jenkinsfile`](worker/Jenkinsfile)
 
 Create a new Jenkins Pipeline named:
 
@@ -1238,7 +1242,7 @@ All other Jenkins configuration, GitHub credentials, Docker Hub credentials, Bui
 
 The completed Worker pipeline configuration should resemble the following.
 
-![Worker Pipeline Configuration](../screenshots/24-worker-pipeline-configuration.png)
+![Worker Pipeline Configuration](screenshots/24-worker-pipeline-configuration.png)
 
 ## 24. Configure the Result Service Pipeline
 
@@ -1258,7 +1262,7 @@ vi Jenkinsfile
 
 Copy the pipeline from:
 
-- [`result/Jenkinsfile`](../result/Jenkinsfile)
+- [`result/Jenkinsfile`](result/Jenkinsfile)
 
 Create a new Jenkins Pipeline named:
 
@@ -1277,7 +1281,7 @@ All other Jenkins configuration, GitHub credentials, Docker Hub credentials, Bui
 
 The completed Result pipeline configuration should resemble the following.
 
-![Result Pipeline Configuration](../screenshots/25-result-pipeline-configuration.png)
+![Result Pipeline Configuration](screenshots/25-result-pipeline-configuration.png)
 
 ## 25. Configure Slack Notifications
 
@@ -1303,7 +1307,7 @@ Slack Notification Plugin
 
 Install the plugin.
 
-![Slack Notification Plugin](../screenshots/26-slack-notification-plugin-installed.png)
+![Slack Notification Plugin](screenshots/26-slack-notification-plugin-installed.png)
 
 ### Create a Slack App
 
@@ -1318,7 +1322,7 @@ https://api.slack.com/apps
 Click:
 
 ```text
-Create New App 
+Create New App
 
 ↓
 
@@ -1336,7 +1340,7 @@ The names used above are placeholders. Feel free to use any name of your choice.
 
 Click **Create App**.
 
-![Slack App Created](../screenshots/27-slack-app-created.png)
+![Slack App Created](screenshots/27-slack-app-created.png)
 
 ### Configure OAuth Permissions
 
@@ -1375,7 +1379,7 @@ Install to Workspace
 
 Approve the installation.
 
-![Slack Bot Installed](../screenshots/28-slack-bot-installed.png)
+![Slack Bot Installed](screenshots/28-slack-bot-installed.png)
 
 After the installation completes, copy the **Bot User OAuth Token**.
 
@@ -1444,7 +1448,7 @@ Click **Create**.
 
 Select:
 
-``Ctext
+```text
 slack-token
 ```
 
@@ -1453,6 +1457,7 @@ Configure the default channel.
 ```text
 #jenkins-builds
 ```
+
 > **Note**
 >
 > If you don't have a slack channel, make sure to create one and replace **#jenkins-builds** with your preferred Slack channel in `Defaut channel/member id`
@@ -1477,12 +1482,11 @@ Test Connection
 
 A successful connection returns SUCCESS and confirms that Jenkins can communicate with your Slack workspace.
 
-![Slack Global Configuration](../screenshots/29-slack-global-configuration.png)
+![Slack Global Configuration](screenshots/29-slack-global-configuration.png)
 
 Finally, click **Save**.
 
-![Slack Test Connection](../screenshots/30-slack-test-connection-success.png)
-
+![Slack Test Connection](screenshots/30-slack-test-connection-success.png)
 
 ### Configure Pipeline Notifications
 
@@ -1500,7 +1504,7 @@ Add the **post** section shown in the repository to the bottom of the Jenkinsfil
 
 The complete configuration is available here:
 
-- [`vote/Jenkinsfile`](../vote/Jenkinsfile)
+- [`vote/Jenkinsfile`](vote/Jenkinsfile)
 
 Ensure that the `environment` block contains:
 
@@ -1510,8 +1514,8 @@ SLACK_CHANNEL = "#jenkins-builds"
 
 Repeat the same Slack notification configuration for:
 
-- [`worker/Jenkinsfile`](../worker/Jenkinsfile)
-- [`result/Jenkinsfile`](../result/Jenkinsfile)
+- [`worker/Jenkinsfile`](worker/Jenkinsfile)
+- [`result/Jenkinsfile`](result/Jenkinsfile)
 
 Finally, verify the following before proceeding:
 
@@ -1526,7 +1530,7 @@ Finally, verify the following before proceeding:
 At this point, all Jenkins pipelines are fully configured and ready for automatic execution.
 
 > **NOTE:**
-> The above step was implemented as an afterthought to ensure the Jenkinsfile contains the needed command to trigger a post-build action; in this case, a slack notification. Since you alread copied the script from: [`vote/Jenkinsfile`](../vote/Jenkinsfile) you may not have to perform this step.
+> The above step was implemented as an afterthought to ensure the Jenkinsfile contains the needed command to trigger a post-build action; in this case, a Slack notification. Since you already copied the script from [`vote/Jenkinsfile`](vote/Jenkinsfile), you may not have to perform this step.
 
 ## 26. Configure the GitHub Webhook
 
@@ -1560,7 +1564,7 @@ Click **Add webhook** to save the configuration.
 
 Once configured, every push to the configured branch will automatically trigger the corresponding Jenkins pipeline.
 
-![GitHub Webhook Configuration](../screenshots/31-github-webhook-configuration.png)
+![GitHub Webhook Configuration](screenshots/31-github-webhook-configuration.png)
 
 # Phase 5 – End-to-End CI/CD Validation
 
@@ -1610,7 +1614,7 @@ git push
 
 After the push completes successfully, GitHub should confirm that the feature branch has been updated.
 
-![Feature Branch Pushed](../screenshots/32-feature-branch-pushed.png)
+![Feature Branch Pushed](screenshots/32-feature-branch-pushed.png)
 
 ## 28. Trigger the Jenkins Pipelines
 
@@ -1644,11 +1648,11 @@ A successful pipeline indicates that:
 
 The completed pipeline should resemble the following.
 
-![Pipeline Build Success](../screenshots/33-pipeline-build-success.png)
+![Pipeline Build Success](screenshots/33-pipeline-build-success.png)
 
 The Pipeline Stage View should display every stage as successful.
 
-![Pipeline Stage View](../screenshots/34-result-stageviewbuild-success.png)
+![Pipeline Stage View](screenshots/34-result-stageviewbuild-success.png)
 
 ## 29. Verify Docker Hub Image Publishing
 
@@ -1674,7 +1678,7 @@ ohjayy/result:a8baf3c
 
 The appearance of newly tagged images confirms that Jenkins successfully authenticated with Docker Hub and published the build artifacts.
 
-![Docker Hub Images](../screenshots/35-dockerhub-images.png)
+![Docker Hub Images](screenshots/35-dockerhub-images.png)
 
 ## 30. Verify Service Deployment
 
@@ -1737,11 +1741,11 @@ Each notification should include:
 
 Successful notifications confirm that Jenkins can communicate with Slack using the configured bot token.
 
-![Slack Build Notification](../screenshots/36-slack-build-notification.png)
+![Slack Build Notification](screenshots/36-slack-build-notification.png)
 
 ## 32. Troubleshooting
 
-The following troubleshooting guide documents SOME of the issues encountered during the development of this project and the solutions used to resolve them.
+The following troubleshooting guide documents **some of the issues encountered during the development of this project** and the solutions used to resolve them.
 
 Since these issues have already been identified and addressed during implementation, you may not encounter the same problems while reproducing this project. However, if you do, the solutions below should help you resolve them quickly.
 
@@ -1945,3 +1949,4 @@ If deployment validation fails, the rollback script automatically restores the p
 </details>
 
 Congratulations! You have successfully implemented a production-oriented, microservices-based CI/CD platform using Docker, Docker Compose, Jenkins, GitHub, Docker Hub, Slack, and AWS EC2. The completed solution supports automated builds, per-service deployments, Docker image versioning using Git commit SHAs, automated rollback, and real-time deployment notifications.
+
