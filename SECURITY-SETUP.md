@@ -932,7 +932,7 @@ set -e
 #
 # The corresponding Dockerfile is then linted automatically.
 docker run --rm -i \
-security-hadolint:1.0 < "$WORKSPACE/$SERVICE/Dockerfile"
+security-hadolint:1.0 - < "$WORKSPACE/$SERVICE/Dockerfile"
 ```
 
 </details>
