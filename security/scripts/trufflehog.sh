@@ -10,11 +10,6 @@ set -e
 #
 # We mount that directory into the container as /repo so TruffleHog can
 # scan the entire repository for verified secrets.
-echo "WORKSPACE=$WORKSPACE"
-pwd
-ls -la
-ls -la "$WORKSPACE"
-find "$WORKSPACE" -name "test-secret.txt"
 docker run --rm \
 -v "$WORKSPACE:/repo" \
 security-trufflehog:1.0 \
