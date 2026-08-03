@@ -10,6 +10,9 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 STATE_DIR="${SCRIPT_DIR}/state"
 
+# Create the rollback state directory if it does not already exist.
+mkdir -p "$STATE_DIR"
+
 # Define the service and Docker Hub repository.
 SERVICE="worker"
 IMAGE="ohjayy/${SERVICE}"

@@ -43,7 +43,7 @@ This project is intentionally completed in **two phases**.
 >
 > This guide focuses on implementing a complete Docker, Docker Compose, and Jenkins CI/CD pipeline for the Example Voting App.
 >
-> If you would like to extend this implementation by integrating automated security scanning, DevSecOps controls, reusable security tooling, and hardened Jenkins pipelines, continue with **[SECURITY-SETUP.md](SECURITY-SETUP.md)** after completing this guide.
+> To extend this implementation with DevSecOps security controls that satisfy the project security requirements, continue with **[SECURITY-SETUP.md](SECURITY-SETUP.md)** after completing this guide.
 
 ### Phase 1 – Manual Docker Deployment
 
@@ -1079,48 +1079,78 @@ Copy the deployment script from the expandable section below.
 
 <details>
 <summary><strong>deploy/vote.sh</strong></summary>
-    ```bash
-    #!/bin/bash
 
-    # Exit immediately if any command fails
-    set -e
+```bash
+#!/bin/bash
 
-    # Define the service and image name
-    SERVICE="vote"
-    IMAGE="ohjayy/${SERVICE}"
+# Exit immediately if any command fails.
+set -e
 
-    # Get the image tag from the Jenkins pipeline
-    TAG="${COMMIT_SHA}"
+# Determine the absolute path of this script.
+# This allows the deployment scripts to locate the rollback
+# state files correctly regardless of where they are executed
+# from (for example, manually or by a Jenkins pipeline).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STATE_DIR="${SCRIPT_DIR}/state"
 
-    # Save the current image tag to allow rollback.sh read the saved tag.
+# Create the rollback state directory if it does not already exist.
+mkdir -p "$STATE_DIR"
+
+# Define the service and Docker Hub repository.
+SERVICE="vote"
+IMAGE="ohjayy/${SERVICE}"
+TAG="${COMMIT_SHA}"
+
+# Define the rollback state files.
+CURRENT_FILE="${STATE_DIR}/${SERVICE}.current"
+PREVIOUS_FILE="${STATE_DIR}/${SERVICE}.previous"
+
+# Save the currently deployed image tag before deploying the new version.
+# This allows rollback.sh to restore the last known working release.
+if [ -f "$CURRENT_FILE" ]; then
+    cp "$CURRENT_FILE" "$PREVIOUS_FILE"
+elif docker ps --filter "name=${SERVICE}" --format "{{.Names}}" | grep -q "^${SERVICE}$"; then
     docker inspect ${SERVICE} \
         --format='{{.Config.Image}}' \
-        | cut -d':' -f2 > .previous-tag
+        | cut -d':' -f2 > "$CURRENT_FILE"
 
-    echo "Deploying ${SERVICE} service..."
+    cp "$CURRENT_FILE" "$PREVIOUS_FILE"
+fi
 
-    # Pull the latest image from Docker Hub
-    docker pull ${IMAGE}:${TAG}
+echo "Deploying ${SERVICE} service..."
 
-    # Recreate only the Vote service
-    docker compose -f vote/docker-compose.yml up -d
+# Pull the new image from Docker Hub.
+docker pull ${IMAGE}:${TAG}
 
-    # Wait for the service to start
-    sleep 10
+# Deploy the updated service.
+docker compose -f vote/docker-compose.yml up -d
 
-    # Verify that the service is running
-    if docker ps --filter "name=${SERVICE}" --filter "status=running" | grep -q "${SERVICE}"; then
-        echo "${SERVICE} deployment completed successfully."
-    else
-        echo "Deployment failed. Rolling back vote service..."
-        bash deploy/rollback.sh ${SERVICE}
-        exit 1
-    fi
-    ```
+# Wait for the container to become healthy.
+sleep 10
+
+# Verify the deployment.
+if docker ps --filter "name=${SERVICE}" --filter "status=running" | grep -q "${SERVICE}"; then
+
+    # Deployment succeeded.
+    # Record the newly deployed version as the current release.
+    echo "${TAG}" > "$CURRENT_FILE"
+
+    echo "${SERVICE} deployment completed successfully."
+
+else
+
+    echo "Deployment failed. Rolling back..."
+
+    bash "${SCRIPT_DIR}/rollback.sh" ${SERVICE}
+
+    exit 1
+
+fi
+```
 
 </details>
 
-Create the rollback script.
+Create the rollback script responsible for restoring the previous successful deployment when a deployment validation fails.
 
 ```bash
 vi rollback.sh
@@ -1131,38 +1161,93 @@ Copy the script from the expandable section below.
 <details>
 <summary><strong>deploy/rollback.sh</strong></summary>
 
-    ```bash
-    #!/bin/bash
+```bash
+#!/bin/bash
 
-    # Exit immediately if any command fails
-    set -e
+# Exit immediately if any command fails.
+# A failed rollback should stop immediately so the issue can be investigated.
+set -e
 
-    # Define the service and image name
-    SERVICE=$1
-    IMAGE="ohjayy/${SERVICE}"
+# Determine the absolute path of this script.
+# This allows the rollback script to locate the deployment
+# state files correctly regardless of where it is executed
+# from (for example, manually or by a Jenkins pipeline).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STATE_DIR="${SCRIPT_DIR}/state"
 
-    # Retrieve the previous image tag
-    PREVIOUS_TAG=$(cat .previous-tag)
+# Create the rollback state directory if it does not already exist.
+mkdir -p "$STATE_DIR"
 
-    echo "Rolling back ${SERVICE} service..."
+# Verify that a service name has been supplied.
+# The rollback script supports all three application services:
+#
+# vote
+# worker
+# result
+#
+# Example:
+# bash deploy/rollback.sh vote
+if [ -z "$1" ]; then
+    echo "Usage: bash deploy/rollback.sh <vote|worker|result>"
+    exit 1
+fi
 
-    # Pull the previous image from Docker Hub
-    docker pull ${IMAGE}:${PREVIOUS_TAG}
+# Define the service passed to the rollback script.
+# This allows a single rollback script to support the Vote,
+# Worker, and Result services.
+SERVICE="$1"
 
-    # Roll back to the previous image
-    IMAGE_TAG=${PREVIOUS_TAG} docker compose up -d --no-deps ${SERVICE}
+# Construct the Docker Hub image name for the selected service.
+IMAGE="ohjayy/${SERVICE}"
 
-    # Wait for the service to restart
-    sleep 10
+# Define the files that store the deployment history.
+#
+# .current  -> the image tag currently running in production.
+# .previous -> the last successfully deployed image tag.
+#
+# These files are maintained by the deployment scripts and are
+# used by rollback.sh to restore the previous working release.
+CURRENT_FILE="${STATE_DIR}/${SERVICE}.current"
+PREVIOUS_FILE="${STATE_DIR}/${SERVICE}.previous"
 
-    # Verify that the rollback was successful
-    if docker ps --filter "name=${SERVICE}" --filter "status=running" | grep -q "${SERVICE}"; then
-        echo "Rollback completed successfully."
-    else
-        echo "Rollback failed."
-        exit 1
-    fi
-    ```
+# Verify that a previous deployment exists.
+if [ ! -f "$PREVIOUS_FILE" ]; then
+    echo "No previous deployment available for rollback."
+    exit 1
+fi
+
+# Retrieve the previously deployed Docker image tag.
+PREVIOUS_TAG=$(cat "$PREVIOUS_FILE")
+
+echo "Rolling back ${SERVICE} service..."
+
+# Pull the previous image from Docker Hub.
+# This ensures Docker is using the exact image that was deployed
+# successfully before the most recent deployment attempt.
+docker pull ${IMAGE}:${PREVIOUS_TAG}
+
+# Redeploy the selected service using its existing Docker Compose file.
+docker compose -f ${SERVICE}/docker-compose.yml up -d
+
+# Allow a few seconds for the container to restart completely.
+sleep 10
+
+# Verify that the service is running after the rollback.
+if docker ps --filter "name=${SERVICE}" --filter "status=running" | grep -q "${SERVICE}"; then
+
+    # The rolled-back version becomes the current production version.
+    echo "${PREVIOUS_TAG}" > "$CURRENT_FILE"
+
+    echo "Rollback completed successfully."
+
+else
+
+    echo "Rollback failed."
+
+    exit 1
+
+fi
+```
 
 </details>
 
@@ -1177,42 +1262,73 @@ Copy the script from the expandable section below.
 <details>
 <summary><strong>deploy/worker.sh</strong></summary>
 
-    #!/bin/bash
+```bash
+#!/bin/bash
 
-    # Exit immediately if any command fails
-    set -e
+# Exit immediately if any command fails.
+set -e
 
-    # Define the service and image name
-    SERVICE="worker"
-    IMAGE="ohjayy/${SERVICE}"
+# Determine the absolute path of this script.
+# This allows the deployment scripts to locate the rollback
+# state files correctly regardless of where they are executed
+# from (for example, manually or by a Jenkins pipeline).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STATE_DIR="${SCRIPT_DIR}/state"
 
-    # Get the image tag from the Jenkins pipeline
-    TAG="${COMMIT_SHA}"
+# Create the rollback state directory if it does not already exist.
+mkdir -p "$STATE_DIR"
 
-    # Save the current image tag to allow rollback.sh read the saved tag.
+# Define the service and Docker Hub repository.
+SERVICE="worker"
+IMAGE="ohjayy/${SERVICE}"
+TAG="${COMMIT_SHA}"
+
+# Define the rollback state files.
+CURRENT_FILE="${STATE_DIR}/${SERVICE}.current"
+PREVIOUS_FILE="${STATE_DIR}/${SERVICE}.previous"
+
+# Save the currently deployed image tag before deploying the new version.
+# This allows rollback.sh to restore the last known working release.
+if [ -f "$CURRENT_FILE" ]; then
+    cp "$CURRENT_FILE" "$PREVIOUS_FILE"
+elif docker ps --filter "name=${SERVICE}" --format "{{.Names}}" | grep -q "^${SERVICE}$"; then
     docker inspect ${SERVICE} \
         --format='{{.Config.Image}}' \
-        | cut -d':' -f2 > .previous-tag
+        | cut -d':' -f2 > "$CURRENT_FILE"
 
-    echo "Deploying ${SERVICE} service..."
+    cp "$CURRENT_FILE" "$PREVIOUS_FILE"
+fi
 
-    # Pull the latest image from Docker Hub
-    docker pull ${IMAGE}:${TAG}
+echo "Deploying ${SERVICE} service..."
 
-    # Recreate only the Worker service
-    docker compose -f worker/docker-compose.yml up -d
+# Pull the new image from Docker Hub.
+docker pull ${IMAGE}:${TAG}
 
-    # Wait for the service to start
-    sleep 10
+# Deploy the updated service.
+docker compose -f worker/docker-compose.yml up -d
 
-    # Verify that the service is running
-    if docker ps --filter "name=${SERVICE}" --filter "status=running" | grep -q "${SERVICE}"; then
-        echo "${SERVICE} deployment completed successfully."
-    else
-        echo "Deployment failed. Rolling back worker service..."
-        bash deploy/rollback.sh ${SERVICE}
-        exit 1
-    fi
+# Wait for the container to become healthy.
+sleep 10
+
+# Verify the deployment.
+if docker ps --filter "name=${SERVICE}" --filter "status=running" | grep -q "${SERVICE}"; then
+
+    # Deployment succeeded.
+    # Record the newly deployed version as the current release.
+    echo "${TAG}" > "$CURRENT_FILE"
+
+    echo "${SERVICE} deployment completed successfully."
+
+else
+
+    echo "Deployment failed. Rolling back..."
+
+    bash "${SCRIPT_DIR}/rollback.sh" ${SERVICE}
+
+    exit 1
+
+fi
+```
 
 </details>
 
@@ -1226,42 +1342,73 @@ Copy the script from the expandable section below.
 <details>
 <summary><strong>deploy/result.sh</strong></summary>
 
-    #!/bin/bash
+```bash
+#!/bin/bash
 
-    # Exit immediately if any command fails
-    set -e
+# Exit immediately if any command fails.
+set -e
 
-    # Define the service and image name
-    SERVICE="result"
-    IMAGE="ohjayy/${SERVICE}"
+# Determine the absolute path of this script.
+# This allows the deployment scripts to locate the rollback
+# state files correctly regardless of where they are executed
+# from (for example, manually or by a Jenkins pipeline).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STATE_DIR="${SCRIPT_DIR}/state"
 
-    # Get the image tag from the Jenkins pipeline
-    TAG="${COMMIT_SHA}"
+# Create the rollback state directory if it does not already exist.
+mkdir -p "$STATE_DIR"
 
-    # Save the current image tag to allow rollback.sh read the saved tag
+# Define the service and Docker Hub repository.
+SERVICE="result"
+IMAGE="ohjayy/${SERVICE}"
+TAG="${COMMIT_SHA}"
+
+# Define the rollback state files.
+CURRENT_FILE="${STATE_DIR}/${SERVICE}.current"
+PREVIOUS_FILE="${STATE_DIR}/${SERVICE}.previous"
+
+# Save the currently deployed image tag before deploying the new version.
+# This allows rollback.sh to restore the last known working release.
+if [ -f "$CURRENT_FILE" ]; then
+    cp "$CURRENT_FILE" "$PREVIOUS_FILE"
+elif docker ps --filter "name=${SERVICE}" --format "{{.Names}}" | grep -q "^${SERVICE}$"; then
     docker inspect ${SERVICE} \
         --format='{{.Config.Image}}' \
-        | cut -d':' -f2 > .previous-tag
+        | cut -d':' -f2 > "$CURRENT_FILE"
 
-    echo "Deploying ${SERVICE} service..."
+    cp "$CURRENT_FILE" "$PREVIOUS_FILE"
+fi
 
-    # Pull the latest image from Docker Hub
-    docker pull ${IMAGE}:${TAG}
+echo "Deploying ${SERVICE} service..."
 
-    # Recreate only the Result service
-    docker compose -f result/docker-compose.yml up -d
+# Pull the new image from Docker Hub.
+docker pull ${IMAGE}:${TAG}
 
-    # Wait for the service to start
-    sleep 10
+# Deploy the updated service.
+docker compose -f result/docker-compose.yml up -d
 
-    # Verify that the service is running
-    if docker ps --filter "name=${SERVICE}" --filter "status=running" | grep -q "${SERVICE}"; then
-        echo "${SERVICE} deployment completed successfully."
-    else
-        echo "Deployment failed. Rolling back result service..."
-        bash deploy/rollback.sh ${SERVICE}
-        exit 1
-    fi
+# Wait for the container to become healthy.
+sleep 10
+
+# Verify the deployment.
+if docker ps --filter "name=${SERVICE}" --filter "status=running" | grep -q "${SERVICE}"; then
+
+    # Deployment succeeded.
+    # Record the newly deployed version as the current release.
+    echo "${TAG}" > "$CURRENT_FILE"
+
+    echo "${SERVICE} deployment completed successfully."
+
+else
+
+    echo "Deployment failed. Rolling back..."
+
+    bash "${SCRIPT_DIR}/rollback.sh" ${SERVICE}
+
+    exit 1
+
+fi
+```
 
 </details>
 
@@ -2108,7 +2255,7 @@ Finally, click **Save**.
 At this point, all Jenkins pipelines are fully configured and ready for automatic execution.
 
 > **NOTE:**
-> The above step was implemented as an afterthought to ensure the Jenkinsfile contains the needed command to trigger a post-build action; in this case, a Slack notification. Since you already copied the script from [`vote/Jenkinsfile`](vote/Jenkinsfile), you may not have to perform this step.
+> If you copied the Jenkinsfiles provided earlier in this guide, the Slack notification stage is already included. This section explains how to configure the Jenkins Slack plugin and credentials required for those notifications to work.
 
 ## 26. Configure the GitHub Webhook
 
