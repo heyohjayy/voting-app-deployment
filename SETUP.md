@@ -39,6 +39,12 @@ This guide assumes a basic understanding of:
 
 This project is intentionally completed in **two phases**.
 
+> **Optional Extension**
+>
+> This guide focuses on implementing a complete Docker, Docker Compose, and Jenkins CI/CD pipeline for the Example Voting App.
+>
+> If you would like to extend this implementation by integrating automated security scanning, DevSecOps controls, reusable security tooling, and hardened Jenkins pipelines, continue with **[SECURITY-SETUP.md](SECURITY-SETUP.md)** after completing this guide.
+
 ### Phase 1 – Manual Docker Deployment
 
 The first phase focuses on deploying the application manually. This helps you understand how the application works before introducing any automation.
@@ -1000,7 +1006,7 @@ mv healthchecks extras/
 Next, create a directory to store the deployment scripts.
 
 ```bash
-mkdir deploy
+mkdir -p deploy/state
 ```
 
 Inside the **deploy** directory, create the deployment scripts.
@@ -1069,9 +1075,50 @@ cd ~/voting-app-deployment/deploy
 vi vote.sh
 ```
 
-Copy the deployment script from:
+Copy the deployment script from the expandable section below.
 
-- [`deploy/vote.sh`](deploy/vote.sh)
+<details>
+<summary><strong>deploy/vote.sh</strong></summary>
+    ```bash
+    #!/bin/bash
+
+    # Exit immediately if any command fails
+    set -e
+
+    # Define the service and image name
+    SERVICE="vote"
+    IMAGE="ohjayy/${SERVICE}"
+
+    # Get the image tag from the Jenkins pipeline
+    TAG="${COMMIT_SHA}"
+
+    # Save the current image tag to allow rollback.sh read the saved tag.
+    docker inspect ${SERVICE} \
+        --format='{{.Config.Image}}' \
+        | cut -d':' -f2 > .previous-tag
+
+    echo "Deploying ${SERVICE} service..."
+
+    # Pull the latest image from Docker Hub
+    docker pull ${IMAGE}:${TAG}
+
+    # Recreate only the Vote service
+    docker compose -f vote/docker-compose.yml up -d
+
+    # Wait for the service to start
+    sleep 10
+
+    # Verify that the service is running
+    if docker ps --filter "name=${SERVICE}" --filter "status=running" | grep -q "${SERVICE}"; then
+        echo "${SERVICE} deployment completed successfully."
+    else
+        echo "Deployment failed. Rolling back vote service..."
+        bash deploy/rollback.sh ${SERVICE}
+        exit 1
+    fi
+    ```
+
+</details>
 
 Create the rollback script.
 
@@ -1079,15 +1126,152 @@ Create the rollback script.
 vi rollback.sh
 ```
 
-Copy the rollback script from:
+Copy the script from the expandable section below.
 
-- [`deploy/rollback.sh`](deploy/rollback.sh)
+<details>
+<summary><strong>deploy/rollback.sh</strong></summary>
 
-Make both scripts executable.
+    ```bash
+    #!/bin/bash
+
+    # Exit immediately if any command fails
+    set -e
+
+    # Define the service and image name
+    SERVICE=$1
+    IMAGE="ohjayy/${SERVICE}"
+
+    # Retrieve the previous image tag
+    PREVIOUS_TAG=$(cat .previous-tag)
+
+    echo "Rolling back ${SERVICE} service..."
+
+    # Pull the previous image from Docker Hub
+    docker pull ${IMAGE}:${PREVIOUS_TAG}
+
+    # Roll back to the previous image
+    IMAGE_TAG=${PREVIOUS_TAG} docker compose up -d --no-deps ${SERVICE}
+
+    # Wait for the service to restart
+    sleep 10
+
+    # Verify that the rollback was successful
+    if docker ps --filter "name=${SERVICE}" --filter "status=running" | grep -q "${SERVICE}"; then
+        echo "Rollback completed successfully."
+    else
+        echo "Rollback failed."
+        exit 1
+    fi
+    ```
+
+</details>
+
+Create the worker script.
+
+```bash
+vi worker.sh
+```
+
+Copy the script from the expandable section below.
+
+<details>
+<summary><strong>deploy/worker.sh</strong></summary>
+
+    #!/bin/bash
+
+    # Exit immediately if any command fails
+    set -e
+
+    # Define the service and image name
+    SERVICE="worker"
+    IMAGE="ohjayy/${SERVICE}"
+
+    # Get the image tag from the Jenkins pipeline
+    TAG="${COMMIT_SHA}"
+
+    # Save the current image tag to allow rollback.sh read the saved tag.
+    docker inspect ${SERVICE} \
+        --format='{{.Config.Image}}' \
+        | cut -d':' -f2 > .previous-tag
+
+    echo "Deploying ${SERVICE} service..."
+
+    # Pull the latest image from Docker Hub
+    docker pull ${IMAGE}:${TAG}
+
+    # Recreate only the Worker service
+    docker compose -f worker/docker-compose.yml up -d
+
+    # Wait for the service to start
+    sleep 10
+
+    # Verify that the service is running
+    if docker ps --filter "name=${SERVICE}" --filter "status=running" | grep -q "${SERVICE}"; then
+        echo "${SERVICE} deployment completed successfully."
+    else
+        echo "Deployment failed. Rolling back worker service..."
+        bash deploy/rollback.sh ${SERVICE}
+        exit 1
+    fi
+
+</details>
+
+Create the result script.
+
+```bash
+vi result.sh
+```
+Copy the script from the expandable section below.
+
+<details>
+<summary><strong>deploy/result.sh</strong></summary>
+
+    #!/bin/bash
+
+    # Exit immediately if any command fails
+    set -e
+
+    # Define the service and image name
+    SERVICE="result"
+    IMAGE="ohjayy/${SERVICE}"
+
+    # Get the image tag from the Jenkins pipeline
+    TAG="${COMMIT_SHA}"
+
+    # Save the current image tag to allow rollback.sh read the saved tag
+    docker inspect ${SERVICE} \
+        --format='{{.Config.Image}}' \
+        | cut -d':' -f2 > .previous-tag
+
+    echo "Deploying ${SERVICE} service..."
+
+    # Pull the latest image from Docker Hub
+    docker pull ${IMAGE}:${TAG}
+
+    # Recreate only the Result service
+    docker compose -f result/docker-compose.yml up -d
+
+    # Wait for the service to start
+    sleep 10
+
+    # Verify that the service is running
+    if docker ps --filter "name=${SERVICE}" --filter "status=running" | grep -q "${SERVICE}"; then
+        echo "${SERVICE} deployment completed successfully."
+    else
+        echo "Deployment failed. Rolling back result service..."
+        bash deploy/rollback.sh ${SERVICE}
+        exit 1
+    fi
+
+</details>
+
+Make all scripts executable.
 
 ```bash
 chmod +x deploy/vote.sh
 chmod +x deploy/rollback.sh
+chmod +x deploy/worker.sh
+chmod +x deploy/result.sh
 ```
 
 > **Note**
@@ -1112,9 +1296,144 @@ Create or edit the Jenkinsfile.
 vi Jenkinsfile
 ```
 
-Copy the pipeline from:
+Replace the contents of the Jenkinsfile with the pipeline below.
 
-- [`vote/Jenkinsfile`](vote/Jenkinsfile)
+<details>
+<summary><strong>vote/Jenkinsfile</strong></summary>
+
+```groovy
+pipeline {
+    agent any
+
+    // Define environment variables used throughout the pipeline
+    environment {
+        IMAGE_NAME = "ohjayy/vote"
+        SLACK_CHANNEL = "#jenkins-builds"
+    }
+
+    stages {
+
+        // Retrieve the latest source code from GitHub
+        stage('Checkout Source') {
+            steps {
+                checkout scm
+            }
+        }
+
+        // Get the short Git commit SHA for image versioning
+        stage('Get Git Commit SHA') {
+            steps {
+                script {
+                    env.COMMIT_SHA = sh(
+                        script: 'git rev-parse --short HEAD',
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Commit SHA: ${env.COMMIT_SHA}"
+                }
+            }
+        }
+
+        // Build the Vote Docker image
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker compose -f vote/docker-compose.yml build'
+            }
+        }
+
+        // Tag the image with the current Git commit SHA
+        stage('Tag Docker Image') {
+            steps {
+                sh """
+                docker tag ${IMAGE_NAME}:latest ${IMAGE_NAME}:${COMMIT_SHA}
+                """
+            }
+        }
+
+        // Log in to Docker Hub using Jenkins credentials
+        stage('Docker Hub Login') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-credentials',
+                    usernameVariable: 'DOCKER_USERNAME',
+                    passwordVariable: 'DOCKER_PASSWORD'
+                )]) {
+                    sh '''
+                    echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+                    '''
+                }
+            }
+        }
+
+        // Push the tagged image to Docker Hub
+        stage('Push Docker Image') {
+            steps {
+                sh """
+                docker push ${IMAGE_NAME}:${COMMIT_SHA}
+                """
+            }
+        }
+
+        // Log out of Docker Hub
+        stage('Docker Hub Logout') {
+            steps {
+                sh 'docker logout'
+            }
+        }
+
+        // Deploy the new image to the target server
+        stage('Deploy Vote Service') {
+            steps {
+                sh 'bash deploy/vote.sh'
+            }
+        }
+    }
+
+    // Send a Slack notification when the pipeline completes
+    post {
+
+        // Always run at the end of the pipeline
+        always {
+            echo "Pipeline execution completed."
+        }
+
+        // Notify Slack if the pipeline succeeds
+        success {
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'good',
+                message: "✅ *SUCCESS* - ${env.JOB_NAME} #${env.BUILD_NUMBER}\nRepository: ${env.JOB_NAME}\nBranch: ${env.BRANCH_NAME}\nBuild URL: ${env.BUILD_URL}"
+            )
+        }
+
+        // Notify Slack if the pipeline fails
+        failure {
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'danger',
+                message: "❌ *FAILED* - ${env.JOB_NAME} #${env.BUILD_NUMBER}\nRepository: ${env.JOB_NAME}\nBranch: ${env.BRANCH_NAME}\nBuild URL: ${env.BUILD_URL}"
+            )
+        }
+
+        // Notify Slack if the pipeline is aborted
+        aborted {
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'warning',
+                message: "⚠️ *ABORTED* - ${env.JOB_NAME} #${env.BUILD_NUMBER}"
+            )
+        }
+    }
+}
+```
+
+</details>
+
+Save and exit the editor.
+
+```bash
+:wq
+```
 
 ### Create the Jenkins Pipeline Job
 
@@ -1204,7 +1523,7 @@ Select **github-credentials** from the Credentials dropdown.
 
 The completed configuration should resemble the image below.
 
-![Pipeline SCM Configuration](screenshots/24-worker-pipeline-configuration.png)
+![Pipeline SCM Configuration](screenshots/23-pipeline-job-configuration-scm.png)
 
 ### Configure Docker Hub Credentials
 
@@ -1229,6 +1548,8 @@ These credentials allow Jenkins to securely authenticate with Docker Hub when pu
 
 Click **Save**.
 
+---
+
 ## 23. Configure the Worker Service Pipeline
 
 The Worker service pipeline is configured using the same procedure as the Vote service pipeline.
@@ -1245,9 +1566,144 @@ Create or edit the Jenkinsfile.
 vi Jenkinsfile
 ```
 
-Copy the pipeline from:
+Replace the contents of the Jenkinsfile with the pipeline below.
 
-- [`worker/Jenkinsfile`](worker/Jenkinsfile)
+<details>
+<summary><strong>worker/Jenkinsfile</strong></summary>
+
+```groovy
+pipeline {
+    agent any
+
+    // Define environment variables used throughout the pipeline
+    environment {
+        IMAGE_NAME = "ohjayy/worker"
+        SLACK_CHANNEL = "#jenkins-builds"
+    }
+
+    stages {
+
+        // Retrieve the latest source code from GitHub
+        stage('Checkout Source') {
+            steps {
+                checkout scm
+            }
+        }
+
+        // Get the short Git commit SHA for image versioning
+        stage('Get Git Commit SHA') {
+            steps {
+                script {
+                    env.COMMIT_SHA = sh(
+                        script: 'git rev-parse --short HEAD',
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Commit SHA: ${env.COMMIT_SHA}"
+                }
+            }
+        }
+
+        // Build the Worker Docker image
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker compose -f worker/docker-compose.yml build'
+            }
+        }
+
+        // Tag the image with the current Git commit SHA
+        stage('Tag Docker Image') {
+            steps {
+                sh """
+                docker tag ${IMAGE_NAME}:latest ${IMAGE_NAME}:${COMMIT_SHA}
+                """
+            }
+        }
+
+        // Log in to Docker Hub using Jenkins credentials
+        stage('Docker Hub Login') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-credentials',
+                    usernameVariable: 'DOCKER_USERNAME',
+                    passwordVariable: 'DOCKER_PASSWORD'
+                )]) {
+                    sh '''
+                    echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+                    '''
+                }
+            }
+        }
+
+        // Push the tagged image to Docker Hub
+        stage('Push Docker Image') {
+            steps {
+                sh """
+                docker push ${IMAGE_NAME}:${COMMIT_SHA}
+                """
+            }
+        }
+
+        // Log out of Docker Hub
+        stage('Docker Hub Logout') {
+            steps {
+                sh 'docker logout'
+            }
+        }
+
+        // Deploy the new image to the target server
+        stage('Deploy Worker Service') {
+            steps {
+                sh 'bash deploy/worker.sh'
+            }
+        }
+    }
+
+    // Send a Slack notification when the pipeline completes
+    post {
+
+        // Always run at the end of the pipeline
+        always {
+            echo "Pipeline execution completed."
+        }
+
+        // Notify Slack if the pipeline succeeds
+        success {
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'good',
+                message: "✅ *SUCCESS* - ${env.JOB_NAME} #${env.BUILD_NUMBER}\nRepository: ${env.JOB_NAME}\nBranch: ${env.BRANCH_NAME}\nBuild URL: ${env.BUILD_URL}"
+            )
+        }
+
+        // Notify Slack if the pipeline fails
+        failure {
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'danger',
+                message: "❌ *FAILED* - ${env.JOB_NAME} #${env.BUILD_NUMBER}\nRepository: ${env.JOB_NAME}\nBranch: ${env.BRANCH_NAME}\nBuild URL: ${env.BUILD_URL}"
+            )
+        }
+
+        // Notify Slack if the pipeline is aborted
+        aborted {
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'warning',
+                message: "⚠️ *ABORTED* - ${env.JOB_NAME} #${env.BUILD_NUMBER}"
+            )
+        }
+    }
+}
+```
+
+</details>
+
+Save and exit the editor.
+
+```bash
+:wq
+```
 
 Create a new Jenkins Pipeline named:
 
@@ -1268,6 +1724,8 @@ The completed Worker pipeline configuration should resemble the following.
 
 ![Worker Pipeline Configuration](screenshots/24-worker-pipeline-configuration.png)
 
+---
+
 ## 24. Configure the Result Service Pipeline
 
 The Result service pipeline is configured using the same process as both the Vote and Worker service pipelines.
@@ -1284,9 +1742,144 @@ Create or edit the Jenkinsfile.
 vi Jenkinsfile
 ```
 
-Copy the pipeline from:
+Replace the contents of the Jenkinsfile with the pipeline below.
 
-- [`result/Jenkinsfile`](result/Jenkinsfile)
+<details>
+<summary><strong>result/Jenkinsfile</strong></summary>
+
+```groovy
+pipeline {
+    agent any
+
+    // Define environment variables used throughout the pipeline
+    environment {
+        IMAGE_NAME = "ohjayy/result"
+        SLACK_CHANNEL = "#jenkins-builds"
+    }
+
+    stages {
+
+        // Retrieve the latest source code from GitHub
+        stage('Checkout Source') {
+            steps {
+                checkout scm
+            }
+        }
+
+        // Get the short Git commit SHA for image versioning
+        stage('Get Git Commit SHA') {
+            steps {
+                script {
+                    env.COMMIT_SHA = sh(
+                        script: 'git rev-parse --short HEAD',
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Commit SHA: ${env.COMMIT_SHA}"
+                }
+            }
+        }
+
+        // Build the Result Docker image
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker compose -f result/docker-compose.yml build'
+            }
+        }
+
+        // Tag the image with the current Git commit SHA
+        stage('Tag Docker Image') {
+            steps {
+                sh """
+                docker tag ${IMAGE_NAME}:latest ${IMAGE_NAME}:${COMMIT_SHA}
+                """
+            }
+        }
+
+        // Log in to Docker Hub using Jenkins credentials
+        stage('Docker Hub Login') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-credentials',
+                    usernameVariable: 'DOCKER_USERNAME',
+                    passwordVariable: 'DOCKER_PASSWORD'
+                )]) {
+                    sh '''
+                    echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+                    '''
+                }
+            }
+        }
+
+        // Push the tagged image to Docker Hub
+        stage('Push Docker Image') {
+            steps {
+                sh """
+                docker push ${IMAGE_NAME}:${COMMIT_SHA}
+                """
+            }
+        }
+
+        // Log out of Docker Hub
+        stage('Docker Hub Logout') {
+            steps {
+                sh 'docker logout'
+            }
+        }
+
+        // Deploy the new image to the target server
+        stage('Deploy Result Service') {
+            steps {
+                sh 'bash deploy/result.sh'
+            }
+        }
+    }
+
+    // Send a Slack notification when the pipeline completes
+    post {
+
+        // Always run at the end of the pipeline
+        always {
+            echo "Pipeline execution completed."
+        }
+
+        // Notify Slack if the pipeline succeeds
+        success {
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'good',
+                message: "✅ *SUCCESS* - ${env.JOB_NAME} #${env.BUILD_NUMBER}\nRepository: ${env.JOB_NAME}\nBranch: ${env.BRANCH_NAME}\nBuild URL: ${env.BUILD_URL}"
+            )
+        }
+
+        // Notify Slack if the pipeline fails
+        failure {
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'danger',
+                message: "❌ *FAILED* - ${env.JOB_NAME} #${env.BUILD_NUMBER}\nRepository: ${env.JOB_NAME}\nBranch: ${env.BRANCH_NAME}\nBuild URL: ${env.BUILD_URL}"
+            )
+        }
+
+        // Notify Slack if the pipeline is aborted
+        aborted {
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'warning',
+                message: "⚠️ *ABORTED* - ${env.JOB_NAME} #${env.BUILD_NUMBER}"
+            )
+        }
+    }
+}
+```
+
+</details>
+
+Save and exit the editor.
+
+```bash
+:wq
+```
 
 Create a new Jenkins Pipeline named:
 
@@ -1511,45 +2104,6 @@ A successful connection returns SUCCESS and confirms that Jenkins can communicat
 Finally, click **Save**.
 
 ![Slack Test Connection](screenshots/30-slack-test-connection-success.png)
-
-### Configure Pipeline Notifications
-
-Open the Vote Jenkinsfile.
-
-```bash
-cd ~/voting-app-deployment/vote
-```
-
-```bash
-vi Jenkinsfile
-```
-
-Add the **post** section shown in the repository to the bottom of the Jenkinsfile.
-
-The complete configuration is available here:
-
-- [`vote/Jenkinsfile`](vote/Jenkinsfile)
-
-Ensure that the `environment` block contains:
-
-```groovy
-SLACK_CHANNEL = "#jenkins-builds"
-```
-
-Repeat the same Slack notification configuration for:
-
-- [`worker/Jenkinsfile`](worker/Jenkinsfile)
-- [`result/Jenkinsfile`](result/Jenkinsfile)
-
-Finally, verify the following before proceeding:
-
-- `vote-pipeline` exists.
-- `worker-pipeline` exists.
-- `result-pipeline` exists.
-- GitHub credentials are configured.
-- Docker Hub credentials are configured.
-- Slack credentials are configured.
-- All deployment scripts are executable.
 
 At this point, all Jenkins pipelines are fully configured and ready for automatic execution.
 
@@ -1974,3 +2528,8 @@ If deployment validation fails, the rollback script automatically restores the p
 
 Congratulations! You have successfully implemented a production-oriented, microservices-based CI/CD platform using Docker, Docker Compose, Jenkins, GitHub, Docker Hub, Slack, and AWS EC2. The completed solution supports automated builds, per-service deployments, Docker image versioning using Git commit SHAs, automated rollback, and real-time deployment notifications.
 
+## Next Steps
+
+You have successfully implemented a complete Docker, Docker Compose, and Jenkins CI/CD pipeline for the Example Voting App.
+
+To extend this project with automated security scanning, DevSecOps controls, hardened Jenkins pipelines, and end-to-end security validation, continue with **[SECURITY-SETUP.md](SECURITY-SETUP.md)**.

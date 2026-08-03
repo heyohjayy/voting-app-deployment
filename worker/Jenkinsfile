@@ -1,22 +1,62 @@
 pipeline {
     agent any
 
-    // Define environment variables used throughout the pipeline
+    // Environment variables used throughout the pipeline.
     environment {
         IMAGE_NAME = "ohjayy/worker"
+        SERVICE = "worker"
         SLACK_CHANNEL = "#jenkins-builds"
     }
 
     stages {
 
-        // Retrieve the latest source code from GitHub
+        // Retrieve the latest source code from GitHub.
         stage('Checkout Source') {
             steps {
                 checkout scm
             }
         }
 
-        // Get the short Git commit SHA for image versioning
+        // Scan the repository for verified secrets.
+        // TruffleHog acts as a Gate and immediately stops
+        // the pipeline if a verified secret is detected.
+        stage('Secret Scan (TruffleHog)') {
+            steps {
+                sh 'bash security/scripts/trufflehog.sh'
+            }
+        }
+
+        // Scan the repository for potential hardcoded secrets.
+        // GitLeaks is configured as a Signal for this project.
+        stage('Secret Scan (GitLeaks)') {
+            steps {
+                sh 'bash security/scripts/gitleaks.sh'
+            }
+        }
+
+        // Lint the Worker Dockerfile against Docker best practices.
+        stage('Dockerfile Lint (Hadolint)') {
+            steps {
+                sh 'bash security/scripts/hadolint.sh'
+            }
+        }
+
+        // Audit application dependencies for known vulnerabilities.
+        // This stage functions as a Signal for this learning project.
+        stage('Dependency Audit') {
+            steps {
+                sh 'bash security/scripts/dependency-audit.sh'
+            }
+        }
+
+        // Perform Static Application Security Testing (SAST).
+        stage('Static Code Analysis (Semgrep)') {
+            steps {
+                sh 'bash security/scripts/semgrep.sh'
+            }
+        }
+
+        // Retrieve the short Git commit SHA for image versioning.
         stage('Get Git Commit SHA') {
             steps {
                 script {
@@ -30,14 +70,14 @@ pipeline {
             }
         }
 
-        // Build the Worker Docker image
+        // Build the Worker Docker image.
         stage('Build Docker Image') {
             steps {
                 sh 'docker compose -f worker/docker-compose.yml build'
             }
         }
 
-        // Tag the image with the current Git commit SHA
+        // Tag the image with the current Git commit SHA.
         stage('Tag Docker Image') {
             steps {
                 sh """
@@ -46,7 +86,18 @@ pipeline {
             }
         }
 
-        // Log in to Docker Hub using Jenkins credentials
+        // Scan the newly-built Docker image for vulnerabilities.
+        // Trivy acts as a Gate and prevents vulnerable images
+        // from being pushed to Docker Hub.
+        stage('Image Vulnerability Scan (Trivy)') {
+            steps {
+                withEnv(["IMAGE_NAME=${IMAGE_NAME}:${COMMIT_SHA}"]) {
+                    sh 'bash security/scripts/trivy.sh'
+                }
+            }
+        }
+
+        // Log in to Docker Hub using Jenkins credentials.
         stage('Docker Hub Login') {
             steps {
                 withCredentials([usernamePassword(
@@ -61,7 +112,7 @@ pipeline {
             }
         }
 
-        // Push the tagged image to Docker Hub
+        // Push the tagged image to Docker Hub.
         stage('Push Docker Image') {
             steps {
                 sh """
@@ -70,14 +121,14 @@ pipeline {
             }
         }
 
-        // Log out of Docker Hub
+        // Log out of Docker Hub.
         stage('Docker Hub Logout') {
             steps {
                 sh 'docker logout'
             }
         }
 
-        // Deploy the new image to the target server
+        // Deploy the Worker service.
         stage('Deploy Worker Service') {
             steps {
                 sh 'bash deploy/worker.sh'
@@ -85,15 +136,14 @@ pipeline {
         }
     }
 
-    // Send a Slack notification when the pipeline completes
     post {
 
-        // Always run at the end of the pipeline
+        // Always execute at the end of the pipeline.
         always {
             echo "Pipeline execution completed."
         }
 
-        // Notify Slack if the pipeline succeeds
+        // Notify Slack when the pipeline succeeds.
         success {
             slackSend(
                 channel: env.SLACK_CHANNEL,
@@ -102,7 +152,7 @@ pipeline {
             )
         }
 
-        // Notify Slack if the pipeline fails
+        // Notify Slack when the pipeline fails.
         failure {
             slackSend(
                 channel: env.SLACK_CHANNEL,
@@ -111,7 +161,7 @@ pipeline {
             )
         }
 
-        // Notify Slack if the pipeline is aborted
+        // Notify Slack when the pipeline is aborted.
         aborted {
             slackSend(
                 channel: env.SLACK_CHANNEL,

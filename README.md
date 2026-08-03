@@ -1,61 +1,63 @@
-# Voting Application Deployment with Docker, Docker Compose & Jenkins CI/CD
+# Voting Application Deployment with Docker, Docker Compose, Jenkins CI/CD & DevSecOps
 
 ## 1. Project Overview
 
-This project demonstrates the end-to-end deployment and automation of a three-tier microservices voting application using Docker, Docker Compose, Jenkins, GitHub, Docker Hub, and Slack. The objective was to transform a manually deployed containerised application into a production-oriented Continuous Integration and Continuous Deployment (CI/CD) solution capable of independently building, publishing, and deploying each application service.
+This project demonstrates the end-to-end deployment, automation, and security hardening of a three-tier microservices voting application using Docker, Docker Compose, Jenkins, GitHub, Docker Hub, Slack, and multiple DevSecOps security tools. The objective was to transform a manually deployed containerised application into a production-oriented Continuous Integration, Continuous Deployment, and DevSecOps solution capable of independently building, securing, publishing, and deploying each application service.
 
 Unlike the original implementation, where all application services were managed from a single Docker Compose file, this project adopts a per-service deployment architecture. Each application component (**Vote**, **Worker**, and **Result**) has its own Docker Compose configuration, Jenkins pipeline, and deployment script, allowing services to be updated independently without interrupting the rest of the application.
 
-The solution integrates GitHub Webhooks for automatic build triggering, Docker Hub as the central image registry, Slack notifications for real-time pipeline monitoring, and an automated rollback mechanism to improve deployment reliability.
+The solution integrates GitHub Webhooks for automatic build triggering, Docker Hub as the central image registry, Slack notifications for real-time pipeline monitoring, an automated rollback mechanism to improve deployment reliability, and multiple security controls that validate every build before deployment.
 
-By the end of the implementation, every Git push automatically triggers the appropriate Jenkins pipeline, builds only the modified service, tags the Docker image using the current Git commit SHA, publishes the image to Docker Hub, deploys the updated container, validates the deployment, and sends the build status directly to Slack.
+By the end of the implementation, every Git push automatically triggers the appropriate Jenkins pipeline, performs secret scanning, Dockerfile linting, dependency auditing, static application security testing, container image vulnerability scanning, builds only the modified service, tags the Docker image using the current Git commit SHA, publishes the image to Docker Hub, deploys the updated container, validates the deployment, and sends the build status directly to Slack.
 
-To reproduce the complete implementation, a detailed step-by-step guide is available in the project documentation:
+## Project Documentation
 
-- **[SETUP.md](docs/SETUP.md)** – Complete implementation guide containing every configuration step, command, and verification screenshot used throughout the project.
+The project documentation has been organised into dedicated guides covering deployment, security implementation, security architecture, and operational procedures.
+
+- **[README.md](README.md)** – Project overview, architecture, technology stack, and implementation summary.
+- **[SETUP.md](SETUP.md)** – Step-by-step guide for implementing the original CI/CD pipeline.
+- **[SECURITY-SETUP.md](SECURITY-SETUP.md)** – Step-by-step guide for hardening the CI/CD pipeline with DevSecOps security controls.
+- **[SECURITY.md](SECURITY.md)** – Security design decisions, implemented security controls, Gate and Signal strategy, baseline management, and scanner verification.
+- **[RUNBOOK.md](RUNBOOK.md)** – Procedures for responding to Gate and Signal findings, creating legitimate baselines, and requesting security exceptions.
 
 ## 2. Repository Structure
 
-The repository has been organised to separate application services, deployment automation, documentation, and supporting resources. Each microservice contains its own Dockerfile, Docker Compose configuration, and Jenkins pipeline, while deployment and rollback automation are centrally managed within the `deploy` directory.
+The repository has been organised to separate application services, deployment automation, security tooling, documentation, and supporting resources. Each microservice contains its own Dockerfile, Docker Compose configuration, and Jenkins pipeline, while deployment automation, rollback, and DevSecOps tooling are organised into dedicated directories to improve maintainability and scalability.
 
 ```text
 voting-app-deployment/
 ├── deploy/
 │   ├── result.sh
 │   ├── rollback.sh
+│   ├── state/
 │   ├── vote.sh
 │   └── worker.sh
-├── docs/
-│   └── SETUP.md
 ├── extras/
 │   ├── docker-stack.yml
+│   ├── healthchecks/
 │   ├── k8s-specifications/
 │   └── seed-data/
-├── healthchecks/
-│   ├── postgres.sh
-│   └── redis.sh
 ├── result/
-│   ├── Dockerfile
-│   ├── Jenkinsfile
-│   ├── docker-compose.yml
-│   └── ...
 ├── screenshots/
+├── security/
+│   ├── baselines/
+│   ├── configs/
+│   ├── dockerfiles/
+│   ├── reports/
+│   ├── screenshots/
+│   └── scripts/
 ├── vote/
-│   ├── Dockerfile
-│   ├── Jenkinsfile
-│   ├── docker-compose.yml
-│   └── ...
 ├── worker/
-│   ├── Dockerfile
-│   ├── Jenkinsfile
-│   ├── docker-compose.yml
-│   └── ...
 ├── LICENSE
 ├── README.md
+├── RUNBOOK.md
+├── SECURITY.md
+├── SECURITY-SETUP.md
+├── SETUP.md
 └── docker-compose.yml
 ```
 
-The original project resources that were not required for the CI/CD implementation have been moved into the `extras` directory, allowing the repository to focus on the Docker and Jenkins deployment workflow implemented in this project.
+The original project resources that were not required for the CI/CD and DevSecOps implementation have been moved into the `extras` directory, allowing the repository to focus on the deployment architecture, security implementation, and supporting documentation developed throughout this project.
 
 ## 3. Solution Architecture
 
@@ -75,7 +77,40 @@ The deployment script pulls the latest image from Docker Hub, recreates only the
 
 ![CI/CD Architecture](screenshots/architecture-diagram.png)
 
-## 4. Infrastructure Overview
+## 4. DevSecOps Security Architecture
+
+Following the successful implementation of the CI/CD pipeline, the deployment workflow was further hardened by integrating DevSecOps practices directly into each Jenkins pipeline.
+
+Before any Docker image is published or deployed, every pipeline automatically performs secret scanning, Dockerfile linting, dependency auditing, static application security testing, and container image vulnerability scanning. These security controls ensure that insecure code, exposed credentials, vulnerable dependencies, and container vulnerabilities are identified before deployment.
+
+Security tools are executed from reusable automation scripts stored under the `security/scripts` directory and run inside dedicated Docker images defined within `security/dockerfiles`. This modular approach keeps the Jenkins pipelines concise while allowing individual security tools to be maintained independently.
+
+The hardened pipeline executes the following workflow:
+
+```text
+GitHub Push
+        │
+        ▼
+GitHub Webhook
+        │
+        ▼
+Jenkins Pipeline
+        │
+        ├── TruffleHog
+        ├── GitLeaks
+        ├── Hadolint
+        ├── Dependency Audit
+        ├── Semgrep
+        ├── Build Docker Image
+        ├── Trivy
+        ├── Push Docker Image
+        ├── Deploy Service
+        └── Slack Notification
+```
+
+![DevSecOps Security Architecture](security/screenshots/devsecops-architecture-diagram.png)
+
+## 5. Infrastructure Overview
 
 The solution is hosted on a single **Ubuntu 24.04 Amazon EC2 instance** running in AWS.
 
@@ -94,13 +129,14 @@ The infrastructure consists of:
 - Docker Hub
 - Slack
 
-## 5. Technology Stack
+## 6. Technology Stack
 
 | Category | Technologies |
 |----------|--------------|
 | Cloud Platform | AWS EC2 (Ubuntu 24.04 LTS) |
 | Containerisation | Docker, Docker Compose |
 | CI/CD | Jenkins, Jenkins Inbound Agent |
+| DevSecOps | TruffleHog, GitLeaks, Hadolint, Semgrep, Trivy, pip-audit, npm audit, .NET Dependency Audit |
 | Source Control | Git, GitHub |
 | Container Registry | Docker Hub |
 | Automation | Bash |
@@ -111,8 +147,9 @@ The infrastructure consists of:
 | Networking | Docker Bridge Network (tenet) |
 | Image Versioning | Git Commit SHA Tagging |
 | Deployment Strategy | Per-Service Continuous Deployment with Automated Rollback |
+| Security Strategy | Gate and Signal Pipeline Validation |
 
-## 6. Docker Containerization
+## 7. Docker Containerization
 
 The first phase of the project focused on containerising the complete voting application using Docker. Each application component was packaged into its own Docker image to ensure consistency across development and deployment environments.
 
@@ -133,7 +170,7 @@ The Docker images were verified before proceeding with orchestration.
 
 ![Docker Image Build](screenshots/02-docker-app-image-build.png)
 
-## 7. Docker Compose Deployment
+## 8. Docker Compose Deployment
 
 After successfully containerising the application, Docker Compose was used to orchestrate the deployment of all services.
 
@@ -155,158 +192,184 @@ The complete application was then deployed using Docker Compose and verified to 
 
 ![Docker Compose Deployment](screenshots/10-docker-compose-up.png)
 
-## 8. Jenkins Build Automation
+## 9. Jenkins Build Automation
 
-To automate the build and deployment process, Jenkins was deployed as a Docker container and configured as the project's Continuous Integration and Continuous Deployment (CI/CD) platform.
+To automate the build, security validation, and deployment process, Jenkins was deployed as a Docker container and configured as the project's Continuous Integration, Continuous Deployment, and DevSecOps platform.
 
 Rather than manually building Docker images and deploying containers after every code change, Jenkins automates the complete workflow. Every Git push triggers the appropriate pipeline, which performs the following tasks:
 
 - Checks out the latest source code from GitHub.
+- Performs secret scanning using TruffleHog.
+- Performs secret scanning using GitLeaks.
+- Lints the service Dockerfile using Hadolint.
+- Audits project dependencies for known vulnerabilities.
+- Performs Static Application Security Testing (SAST) using Semgrep.
 - Retrieves the current Git commit SHA.
 - Builds the Docker image for the modified service.
 - Tags the image using the Git commit SHA.
+- Scans the Docker image using Trivy.
 - Authenticates with Docker Hub.
 - Pushes the newly built image to Docker Hub.
 - Executes the corresponding deployment script.
 - Sends build notifications to Slack.
 
-This automation significantly reduces manual intervention while ensuring every deployment follows the same repeatable process.
+Security validation is fully integrated into every Jenkins pipeline. Critical security issues identified by Gate stages immediately stop the pipeline before any Docker image is published or deployed, while Signal stages report findings for review without interrupting the deployment workflow.
+
+This automation significantly reduces manual intervention while ensuring every deployment follows the same secure, repeatable, and production-oriented process.
 
 Jenkins was successfully deployed and configured using Docker.
 
 ![Jenkins Controller](screenshots/13-jenkins-container+UI-welcomepage.png)
 
-## 9. Jenkins Build Agent
+## 10. Jenkins Build Agent
 
 To separate build execution from the Jenkins controller, a dedicated Jenkins Inbound Build Agent was provisioned as a Docker container.
 
-The build agent is responsible for executing all pipeline stages, including Docker image builds, image tagging, Docker Hub publishing, and deployment script execution. Offloading builds to a dedicated agent improves scalability and follows Jenkins best practices by keeping the controller focused on orchestration rather than workload execution.
+The build agent is responsible for executing all pipeline stages, including security validation, Docker image builds, image tagging, Docker Hub publishing, and deployment script execution. Offloading builds to a dedicated agent improves scalability and follows Jenkins best practices by keeping the controller focused on orchestration rather than workload execution.
 
 The Jenkins controller communicates securely with the build agent through the Jenkins remoting protocol, allowing all pipelines to execute on the agent while remaining centrally managed from the Jenkins dashboard.
 
-The successful connection between the Jenkins controller and the build agent was verified before implementing the CI/CD pipelines.
+The successful connection between the Jenkins controller and the build agent was verified before implementing the CI/CD and DevSecOps pipelines.
 
-![Jenkins Build Agent](screenshots/19-jenkins-agent-online.png)
+![Jenkins Build Agent](screenshots/19-jenkins-agent-online.png) 
 
-## 10. Per-Service CI/CD Pipeline Design
+## 11. Per-Service CI/CD Pipeline Design
 
-The CI/CD implementation follows a per-service pipeline design, where each application component is managed independently through its own Jenkins pipeline.
+The project adopts a per-service CI/CD pipeline design, where each application component is managed independently through its own hardened Jenkins pipeline.
 
-Three independent declarative Jenkins pipelines were implemented to support the deployment of each application service:
+Three independent declarative Jenkins pipelines were implemented:
 
 - **vote-pipeline**
 - **worker-pipeline**
 - **result-pipeline**
 
-Each pipeline references its own service-specific `Jenkinsfile` and deployment script, ensuring that modifications to one service trigger only its corresponding pipeline without affecting the remaining application components.
+Each pipeline references its own service-specific `Jenkinsfile` and deployment script, ensuring that changes to one service trigger only its corresponding pipeline without affecting the remaining application components.
 
-Rather than combining Continuous Integration (CI) and Continuous Deployment (CD) into a single Jenkinsfile, the responsibilities were deliberately separated to improve maintainability and scalability.
+Rather than combining Continuous Integration (CI), Continuous Deployment (CD), and deployment logic into a single Jenkinsfile, responsibilities were deliberately separated to improve maintainability, scalability, and long-term flexibility.
 
-The **Jenkinsfile** is responsible for the Continuous Integration (CI) phase. Its responsibilities include:
+The **Jenkinsfile** is responsible for orchestrating the CI and DevSecOps workflow. Its responsibilities include:
 
 1. Checking out the latest source code from GitHub.
-2. Retrieving the current Git commit SHA.
-3. Building the Docker image.
-4. Tagging the image using the Git commit SHA.
-5. Authenticating with Docker Hub.
-6. Pushing the tagged image to Docker Hub.
-7. Executing the corresponding deployment script.
+2. Performing secret scanning using TruffleHog.
+3. Performing secret scanning using GitLeaks.
+4. Linting the service Dockerfile using Hadolint.
+5. Auditing application dependencies for known vulnerabilities.
+6. Performing Static Application Security Testing (SAST) using Semgrep.
+7. Retrieving the current Git commit SHA.
+8. Building the Docker image.
+9. Tagging the image using the Git commit SHA.
+10. Scanning the Docker image using Trivy.
+11. Authenticating with Docker Hub.
+12. Publishing the tagged Docker image.
+13. Executing the corresponding deployment script.
+14. Sending the pipeline status to Slack.
 
-Once the image has been successfully built and published, the deployment process is handed over to the service-specific deployment script ([vote.sh](deploy/vote.sh), [worker.sh](deploy/worker.sh), or [result.sh](deploy/result.sh)).
+Once the image has been successfully validated, built, and published, deployment is handed over to the corresponding service deployment script ([vote.sh](deploy/vote.sh), [worker.sh](deploy/worker.sh), or [result.sh](deploy/result.sh)).
 
 Each deployment script is responsible for the Continuous Deployment (CD) phase by:
 
-- Pulling the newly published image from Docker Hub.
+- Recording the currently deployed image version for rollback.
+- Pulling the newly published Docker image from Docker Hub.
 - Recreating only the affected application service using its dedicated Docker Compose configuration.
-- Verifying that the service has started successfully.
-- Automatically invoking `rollback.sh` if the deployment validation fails.
+- Verifying that the updated service starts successfully.
+- Updating the deployment state for future rollback operations.
+- Automatically invoking `rollback.sh` if deployment validation fails.
 
-By separating CI and CD responsibilities, the Jenkins pipelines remain lightweight and focused solely on build automation, while all deployment logic is isolated within reusable Bash scripts. This design also improves future maintainability. For example, if the deployment platform changes from Docker Compose to Kubernetes, only the deployment scripts need to be updated, while the Jenkins pipelines remain largely unchanged.
+The shared `rollback.sh` script restores the last successfully deployed image recorded within the `deploy/state/` directory, allowing services to recover automatically from failed deployments without affecting the remaining application components.
 
-This modular approach reduces deployment time, minimises service interruption, simplifies maintenance, and allows each microservice to evolve independently while maintaining a consistent deployment workflow across the entire application.
+By separating pipeline orchestration, deployment, and rollback into dedicated components, the solution remains modular and easy to maintain. Future platform migrations, such as replacing Docker Compose with Kubernetes, would require changes primarily to the deployment scripts while leaving the Jenkins pipelines largely unchanged.
+
+This architecture reduces deployment time, minimises service interruption, simplifies maintenance, and provides a repeatable deployment workflow suitable for production-oriented environments.
 
 ![Jenkins Pipeline Configuration](screenshots/22-pipeline-job-configuration-general.png)
 
-## 11. GitHub Integration
+## 12. GitHub Integration
 
-GitHub served as the project's central source code repository, providing version control and acting as the single source of truth for all application code, deployment scripts, and CI/CD configuration.
+GitHub serves as the project's central source code repository, providing version control and acting as the single source of truth for the application source code, deployment scripts, infrastructure configuration, and DevSecOps automation.
 
-The repository was restructured to support a per-service deployment model, with each application service maintaining its own Docker Compose configuration and Jenkins pipeline. A dedicated feature branch (`feature/voting-app-cicd`) was used throughout development to isolate CI/CD implementation from the original project before validation.
+Development was carried out on a dedicated feature branch (`feature/voting-app-cicd`), allowing the CI/CD and DevSecOps implementation to be completed and validated independently before being merged.
 
-Jenkins securely authenticates with GitHub using a Personal Access Token (PAT), allowing each pipeline to clone the repository, retrieve the latest source code, and build the appropriate service whenever changes are pushed.
+GitHub Webhooks provide event-driven pipeline execution by automatically notifying Jenkins whenever code is pushed to the repository. Jenkins securely authenticates with GitHub using a Personal Access Token (PAT), checks out the latest source code, and executes only the pipeline associated with the modified service.
 
-This integration forms the first stage of the automated CI/CD workflow by ensuring every deployment begins with the latest version of the source code.
+This integration forms the entry point of the automated DevSecOps workflow by ensuring that every deployment begins with the latest version of the source code and immediately passes through the configured security controls before deployment.
 
-## 12. Docker Hub Integration
+## 13. Docker Hub Integration
 
-Docker Hub was configured as the project's private container registry, providing a central location for storing and distributing Docker images produced during the CI pipeline.
+Docker Hub serves as the project's private container registry, providing a central location for storing and distributing Docker images produced during the Jenkins pipelines.
 
-After building each application service, Jenkins authenticates with Docker Hub using securely stored Jenkins credentials before publishing the newly built image.
+After every successful security validation and Docker image build, Jenkins authenticates with Docker Hub using securely managed credentials before publishing the newly built image.
 
-To improve image traceability and version control, every image is tagged using the current Git commit SHA. This approach guarantees that each deployment references a unique image version while also supporting automated rollback to previously deployed releases when necessary.
+Each Docker image is tagged using the current Git commit SHA, ensuring every deployment references a unique, immutable image version while supporting traceability and reliable rollback.
 
-A typical image publication workflow consists of:
+The image publication workflow consists of:
 
 1. Build the Docker image.
 2. Tag the image using the current Git commit SHA.
-3. Authenticate with Docker Hub.
-4. Push the tagged image to Docker Hub.
-5. Log out of Docker Hub.
+3. Perform container image vulnerability scanning using Trivy.
+4. Authenticate with Docker Hub.
+5. Publish the tagged Docker image.
+6. Log out of Docker Hub.
 
-Using Docker Hub as the central image registry ensures that deployment servers always retrieve the exact image version produced by the Jenkins pipeline.
+Because Docker images are published only after all configured Gate stages complete successfully, Docker Hub stores only validated application images that have successfully passed the pipeline security controls.
 
 ![Docker Hub Repository](screenshots/35-dockerhub-images.png)
 
-## 13. Automated Deployment & Rollback
+## 14. Automated Deployment & Rollback
 
-Once Jenkins successfully completes the Continuous Integration phase, control is transferred to the service-specific deployment scripts responsible for Continuous Deployment.
+Once Jenkins successfully completes all CI and DevSecOps validation stages, control is transferred to the service-specific deployment scripts responsible for Continuous Deployment.
 
 Each deployment script performs the following tasks:
 
-1. Pull the newly published Docker image from Docker Hub.
-2. Recreate only the affected application service using its dedicated Docker Compose configuration.
-3. Verify that the deployment completed successfully.
-4. Automatically invoke the rollback script if deployment validation fails.
+1. Preserve the currently deployed image version.
+2. Pull the newly published Docker image from Docker Hub.
+3. Recreate only the affected application service using its dedicated Docker Compose configuration.
+4. Verify that the updated service started successfully.
+5. Update the deployment state used for future rollback operations.
+6. Automatically invoke the rollback script if deployment validation fails.
 
-The rollback mechanism provides an additional layer of deployment reliability by restoring the previously deployed image whenever a deployment cannot be successfully completed. This prevents failed deployments from leaving the application in an unstable state while minimising service disruption.
+The deployment state is maintained within the `deploy/state/` directory, allowing each service to track both its current and previously deployed image versions independently.
 
-Separating deployment and rollback logic into dedicated Bash scripts keeps the Jenkins pipelines lightweight, reusable, and easier to maintain. It also allows the deployment strategy to evolve independently from the CI process. For example, migrating from Docker Compose to Kubernetes would require changes only to the deployment scripts, while the Jenkins pipelines would remain largely unchanged.
+If deployment validation fails, the shared `rollback.sh` script automatically restores the last successfully deployed image for the affected service. This approach minimises downtime, preserves application availability, and prevents failed deployments from leaving services in an inconsistent state.
 
-This modular design improves maintainability, simplifies troubleshooting, and provides a robust deployment workflow suitable for production-oriented environments.
+Separating pipeline orchestration, deployment, rollback, and deployment state management into dedicated scripts keeps the Jenkins pipelines concise, reusable, and easier to maintain while allowing the deployment strategy to evolve independently from the CI process.
 
-## 14. GitHub Webhook Automation
+This modular architecture improves maintainability, simplifies troubleshooting, supports automated recovery from deployment failures, and provides a production-oriented deployment workflow suitable for modern DevSecOps environments.
+
+## 15. GitHub Webhook Automation
 
 GitHub Webhooks were configured to eliminate the need for manually triggering Jenkins builds.
 
-Whenever code is pushed to the repository, GitHub immediately sends a webhook event to the Jenkins server. Jenkins receives the notification, determines which pipeline should be executed, checks out the latest source code, and begins the automated CI/CD workflow.
+Whenever code is pushed to the repository, GitHub immediately sends a webhook event to the Jenkins server. Jenkins receives the notification, identifies the appropriate service pipeline, checks out the latest source code, and begins the automated DevSecOps workflow.
 
-This event-driven approach ensures that deployments occur automatically after every successful code push, enabling a fully automated Continuous Integration and Continuous Deployment process.
+Each pipeline automatically performs security validation, builds the Docker image, publishes the validated image to Docker Hub, deploys the updated service, and reports the build status to Slack without requiring manual intervention.
+
+This event-driven approach enables fully automated Continuous Integration, Continuous Deployment, and DevSecOps while ensuring every code change passes through the configured security controls before deployment.
 
 The webhook payload targets the Jenkins GitHub webhook endpoint and is configured to trigger on every push event.
 
 ![GitHub Webhook Configuration](screenshots/31-github-webhook-configuration.png)
 
-## 15. Slack Notification Integration
+## 16. Slack Notification Integration
 
-Slack was integrated with Jenkins to provide real-time visibility into pipeline execution.
+Slack was integrated with Jenkins to provide real-time visibility into every pipeline execution.
 
-The Jenkins Slack Notification Plugin was configured using a Slack Bot User OAuth Token stored securely as a Jenkins Secret Text credential. Once configured, each pipeline automatically posts notifications to the designated Slack channel after every build.
+The Jenkins Slack Notification Plugin was configured using a Slack Bot User OAuth Token stored securely as a Jenkins Secret Text credential. Once configured, each pipeline automatically posts notifications to the designated Slack channel after every execution.
 
-Notifications include important deployment information such as:
+Notifications are generated for both successful and failed pipeline executions and include:
 
-- Pipeline status (Success, Failure, or Aborted).
-- Jenkins job name.
-- Build number.
-- Source branch.
-- Direct link to the Jenkins build.
+- Pipeline status (Success, Failure, or Aborted)
+- Jenkins job name
+- Build number
+- Source branch
+- Direct link to the Jenkins build
 
-This integration enables rapid monitoring of deployment activities without requiring administrators to continuously access the Jenkins dashboard.
+This integration enables rapid monitoring of deployment activities and security validation results without requiring administrators to continuously access the Jenkins dashboard.
 
 ![Slack Build Notification](screenshots/36-slack-build-notification.png)
 
-## 16. End-to-End CI/CD Workflow
+## 17. End-to-End DevSecOps Workflow
 
-The completed CI/CD solution provides a fully automated deployment pipeline that begins with a code change and ends with a successful deployment of the updated application service.
+The completed solution provides a fully automated DevSecOps pipeline that begins with a source code change and ends with the successful deployment of a validated application service.
 
 The workflow consists of the following stages:
 
@@ -314,54 +377,71 @@ The workflow consists of the following stages:
 2. GitHub sends a webhook event to Jenkins.
 3. Jenkins automatically triggers the corresponding service pipeline.
 4. Jenkins checks out the latest source code.
-5. The current Git commit SHA is retrieved.
-6. A new Docker image is built.
-7. The image is tagged using the Git commit SHA.
-8. Jenkins authenticates with Docker Hub.
-9. The tagged image is published to Docker Hub.
-10. The service-specific deployment script is executed.
-11. The deployment script pulls the latest image from Docker Hub.
-12. Only the affected application service is recreated using its dedicated Docker Compose configuration.
-13. The deployment is validated to confirm that the service is running successfully.
-14. If deployment validation fails, the rollback script automatically restores the previous image.
-15. Jenkins sends the final pipeline status to the configured Slack channel.
+5. TruffleHog performs verified secret scanning.
+6. GitLeaks performs additional secret scanning.
+7. Hadolint validates the service Dockerfile.
+8. Project dependencies are audited for known vulnerabilities.
+9. Semgrep performs Static Application Security Testing (SAST).
+10. Jenkins retrieves the current Git commit SHA.
+11. A new Docker image is built.
+12. The image is tagged using the Git commit SHA.
+13. Trivy scans the newly built Docker image for vulnerabilities.
+14. Jenkins authenticates with Docker Hub.
+15. The validated Docker image is published to Docker Hub.
+16. The service-specific deployment script is executed.
+17. The deployment script records the current deployment state.
+18. The updated application service is deployed.
+19. The deployment is validated.
+20. If deployment validation fails, the rollback script restores the previous working image automatically.
+21. Jenkins sends the final pipeline status to Slack.
 
-This workflow enables fully automated Continuous Integration and Continuous Deployment while ensuring that application updates remain isolated to the modified service, reducing downtime and improving deployment reliability.
+This workflow provides a secure, repeatable, and production-oriented deployment process in which every application update is validated before deployment while remaining isolated to the modified service.
 
 ![Pipeline Build Success](screenshots/33-pipeline-build-success.png)
 
-## 17. Project Validation
+## 18. Project Validation
 
-The completed solution was validated to confirm that every component of the CI/CD pipeline functioned as expected.
+The completed solution was validated to confirm that every component of the DevSecOps pipeline functioned as expected.
 
 The following implementation objectives were successfully achieved:
 
 - Dockerised the complete three-tier voting application.
 - Deployed Redis and PostgreSQL as shared infrastructure services.
 - Implemented independent Docker Compose configurations for the Vote, Worker, and Result services.
-- Provisioned Jenkins Controller and Jenkins Inbound Build Agent using Docker.
+- Provisioned a Jenkins Controller and Jenkins Inbound Build Agent using Docker.
 - Created three independent declarative Jenkins pipelines.
 - Integrated GitHub using secure Personal Access Token authentication.
+- Configured GitHub Webhooks for automatic pipeline execution.
 - Configured Docker Hub as the central container registry.
 - Implemented Git commit SHA image versioning.
-- Automated deployments using service-specific deployment scripts.
-- Implemented automatic rollback for failed deployments.
-- Configured GitHub Webhooks for automatic pipeline execution.
-- Integrated Slack notifications for real-time build monitoring.
-- Successfully validated the complete end-to-end CI/CD workflow.
+- Implemented automated deployment using service-specific deployment scripts.
+- Implemented automated rollback with deployment state management.
+- Integrated TruffleHog for verified secret scanning.
+- Integrated GitLeaks for additional secret detection.
+- Integrated Hadolint for Dockerfile linting.
+- Integrated dependency auditing for Python, .NET, and Node.js services.
+- Integrated Semgrep for Static Application Security Testing (SAST).
+- Integrated Trivy for container image vulnerability scanning.
+- Implemented Gate and Signal security controls throughout the pipelines.
+- Integrated Slack notifications for real-time pipeline monitoring.
+- Successfully validated the complete end-to-end DevSecOps workflow.
 
-The successful execution of all three service pipelines demonstrates that the complete deployment process—from source code commit to production deployment—operates automatically without manual intervention.
+The successful execution of all three hardened pipelines demonstrates that the complete process—from source code commit through security validation, image publishing, deployment, rollback, and notification—operates automatically without manual intervention.
 
 ![Successful Pipeline Execution](screenshots/34-result-stageviewbuild-success.png)
 
-## 18. Conclusion
+## 19. Conclusion
 
-This project demonstrates the successful implementation of a production-oriented CI/CD solution for a microservices-based voting application using Docker, Docker Compose, Jenkins, GitHub, Docker Hub, and Slack.
+This project demonstrates the successful implementation of a production-oriented DevSecOps platform for a microservices-based voting application using Docker, Docker Compose, Jenkins, GitHub, Docker Hub, Slack, and automated security tooling.
 
-By separating the application into independently deployable services, introducing dedicated Jenkins pipelines, implementing automated deployment scripts with rollback support, and integrating GitHub Webhooks and Slack notifications, the deployment workflow has been transformed from a manual process into a reliable, repeatable, and fully automated CI/CD pipeline.
+By separating the application into independently deployable services, introducing dedicated Jenkins pipelines, integrating automated security validation, implementing deployment scripts with deployment state management and automated rollback, and automating the entire workflow through GitHub Webhooks and Slack notifications, the deployment process has evolved into a secure, reliable, repeatable, and fully automated DevSecOps pipeline.
 
-The modular architecture adopted throughout this implementation improves scalability, simplifies maintenance, minimises service disruption during deployments, and provides a solid foundation for future enhancements such as Kubernetes-based orchestration, Infrastructure as Code, automated testing, and advanced deployment strategies.
+The modular architecture adopted throughout this implementation improves scalability, simplifies maintenance, reduces deployment risk, and provides a solid foundation for future enhancements such as Kubernetes orchestration, Infrastructure as Code, policy enforcement, automated testing, and advanced deployment strategies.
 
-For readers interested in reproducing the complete implementation, a detailed step-by-step guide is available in the project documentation:
+For readers interested in reproducing the complete implementation, the project documentation has been organised into dedicated guides:
 
-- **[SETUP.md](docs/SETUP.md)** – Complete implementation guide containing every configuration step, command, and verification screenshot used throughout the project.
+- **[README.md](README.md)** – Project overview, architecture, technology stack, and implementation summary.
+- **[SETUP.md](SETUP.md)** – Step-by-step guide for implementing the original CI/CD pipeline.
+- **[SECURITY-SETUP.md](SECURITY-SETUP.md)** – Step-by-step guide for hardening the CI/CD pipeline with DevSecOps security controls.
+- **[SECURITY.md](SECURITY.md)** – Security design decisions, implemented security controls, Gate and Signal strategy, baseline management, and scanner verification.
+- **[RUNBOOK.md](RUNBOOK.md)** – Procedures for responding to Gate and Signal findings, creating legitimate baselines, and requesting security exceptions

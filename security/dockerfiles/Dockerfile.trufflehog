@@ -1,0 +1,5 @@
+FROM trufflesecurity/trufflehog:latest@sha256:aa821cf4ace8861c7d096d83818cdf7bb9719028a52d37a52eaad44086a52577
+
+WORKDIR /workspace
+
+ENTRYPOINT ["trufflehog"]
