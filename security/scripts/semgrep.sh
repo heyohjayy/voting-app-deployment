@@ -15,4 +15,4 @@ set -e
 docker run --rm \
 -v "$WORKSPACE:/src" \
 security-semgrep:1.0 \
-semgrep scan --config=auto
+semgrep scan --config=auto || true

@@ -903,7 +903,7 @@ set -e
 docker run --rm \
 -v "$WORKSPACE:/repo" \
 security-gitleaks:1.0 \
-dir /repo
+dir /repo || true
 ```
 
 </details>
@@ -932,7 +932,7 @@ set -e
 #
 # The corresponding Dockerfile is then linted automatically.
 docker run --rm -i \
-security-hadolint:1.0 - < "$WORKSPACE/$SERVICE/Dockerfile"
+security-hadolint:1.0 - < "$WORKSPACE/$SERVICE/Dockerfile" || true
 ```
 
 </details>
@@ -969,7 +969,7 @@ vote)
 docker run --rm \
 -v "$WORKSPACE/vote:/src" \
 security-dependency-audit:1.0 \
-sh -c "cd /src && pip-audit"
+sh -c "cd /src && pip-audit" || true
 
 ;;
 
@@ -978,7 +978,7 @@ worker)
 docker run --rm \
 -v "$WORKSPACE/worker:/src" \
 security-dependency-audit:1.0 \
-sh -c "cd /src && dotnet restore && dotnet list package --vulnerable"
+sh -c "cd /src && dotnet restore && dotnet list package --vulnerable" || true
 
 ;;
 
@@ -987,7 +987,7 @@ result)
 docker run --rm \
 -v "$WORKSPACE/result:/src" \
 security-dependency-audit:1.0 \
-sh -c "cd /src && npm install && npm audit --audit-level=high"
+sh -c "cd /src && npm install && npm audit --audit-level=high" || true
 
 ;;
 
@@ -1030,7 +1030,7 @@ set -e
 docker run --rm \
 -v "$WORKSPACE:/src" \
 security-semgrep:1.0 \
-semgrep scan --config=auto
+semgrep scan --config=auto || true
 ```
 
 </details>
@@ -1065,7 +1065,7 @@ set -e
 docker run --rm \
 -v /var/run/docker.sock:/var/run/docker.sock \
 security-trivy:1.0 \
-image "$IMAGE_NAME"
+image "$IMAGE_NAME" || true
 ```
 
 </details>

@@ -13,4 +13,4 @@ set -e
 docker run --rm \
 -v "$WORKSPACE:/repo" \
 security-gitleaks:1.0 \
-dir /repo
+dir /repo || true

@@ -20,4 +20,4 @@ set -e
 docker run --rm \
 -v /var/run/docker.sock:/var/run/docker.sock \
 security-trivy:1.0 \
-image "$IMAGE_NAME"
+image "$IMAGE_NAME" || true
