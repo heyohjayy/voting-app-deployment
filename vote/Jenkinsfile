@@ -36,18 +36,24 @@ pipeline {
 
         // Lint the Vote Dockerfile against Docker best practices.
         stage('Dockerfile Lint (Hadolint)') {
-            steps {
-                sh 'bash security/scripts/hadolint.sh'
-            }
-        }
+    environment {
+        SERVICE = 'vote'
+    }
+    steps {
+        sh 'bash security/scripts/hadolint.sh'
+    }
+}
 
         // Audit application dependencies for known vulnerabilities.
         // This stage functions as a Signal for this learning project.
         stage('Dependency Audit') {
-            steps {
-                sh 'bash security/scripts/dependency-audit.sh'
-            }
-        }
+    environment {
+        SERVICE = 'vote'
+    }
+    steps {
+        sh 'bash security/scripts/dependency-audit.sh'
+    }
+}
 
         // Perform Static Application Security Testing (SAST).
         stage('Static Code Analysis (Semgrep)') {
