@@ -1,4 +1,4 @@
-gipeline {
+pipeline {
     agent any
 
     // Environment variables used throughout the pipeline.

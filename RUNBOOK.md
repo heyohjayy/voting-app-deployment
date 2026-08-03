@@ -147,7 +147,6 @@ Blocking deployment on these inherited findings would prevent successful complet
 4. Update affected packages where practical.
 5. If the findings relate to accepted upstream vulnerabilities, document them using the project's baseline process.
 6. Continue monitoring future image updates for security improvements.
-```
 
 # 4. Baseline Management
 
