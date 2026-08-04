@@ -29,6 +29,8 @@ To provide a consistent and reproducible scanning environment, every security to
 
 Each scanner is obtained from its official container image and encapsulated within a dedicated project Dockerfile stored under `security/dockerfiles/`. During pipeline execution, Jenkins invokes reusable shell scripts located in `security/scripts/`, which execute the corresponding scanner inside its container.
 
+TruffleHog is configured to scan only the Git commit range introduced by the current Jenkins build. This approach ensures that newly committed verified secrets immediately fail the pipeline before any Docker image is built, published or deployed, while allowing historical test secrets that have already been removed from the repository to remain in the Git history without permanently blocking future deployments.
+
 This approach provides the following benefits:
 
 - Consistent scanner versions across all pipeline executions.

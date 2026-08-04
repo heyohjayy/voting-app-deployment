@@ -21,7 +21,7 @@ This runbook describes how to respond whenever a Gate or Signal produces finding
 
 ### Purpose
 
-TruffleHog scans the complete Git history for verified secrets such as API keys, access tokens, cloud credentials, and other sensitive information.
+TruffleHog scans the Git commit range introduced by the current Jenkins build for verified secrets such as API keys, access tokens, cloud credentials and other sensitive information. This configuration prevents historical test secrets that have already been removed from permanently blocking future deployments while ensuring that any newly committed verified secret immediately fails the pipeline before a Docker image can be published or deployed.
 
 Within this project, TruffleHog is configured as a **Gate**. Any verified secret immediately terminates the pipeline before a Docker image can be published or deployed.
 
@@ -42,7 +42,7 @@ Examples include:
 2. Identify the TruffleHog stage.
 3. Review the reported secret.
 4. Locate the affected file within the repository.
-5. Remove the exposed secret from the repository.
+5. Remove the exposed secret from the affected commit and commit the correction.
 6. Replace the secret with an environment variable, Jenkins credential, or other secure credential management mechanism where appropriate.
 7. Commit the corrected code.
 8. Push the changes to GitHub.
