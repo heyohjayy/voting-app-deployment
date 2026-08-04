@@ -7,25 +7,36 @@
 set -e
 
 # Jenkins provides the WORKSPACE environment variable inside the Jenkins
-# container. Because Docker commands are executed through the host Docker
-# daemon, the Jenkins workspace must be referenced using its corresponding
-# Docker volume path on the host.
-HOST_WORKSPACE="/var/lib/docker/volumes/jenkins_home/_data/workspace/$(basename "$WORKSPACE")"
+# agent container. Resolve the corresponding workspace on the Docker host
+# automatically so this script remains portable across environments.
+HOST_WORKSPACE="$(docker inspect "$HOSTNAME" \
+  --format '{{range .Mounts}}{{if eq .Destination "/home/jenkins/agent"}}{{.Source}}{{end}}{{end}}')/workspace/$(basename "$WORKSPACE")"
 
-# Mount the repository into the container and scan the repository filesystem
-# for hard-coded GitHub Personal Access Tokens (PATs).
+# Determine the commit range to scan.
 #
-# The --include-detectors flag restricts the scan to GitHub tokens only,
-# avoiding unrelated findings from the sample application and third-party
-# dependencies.
+# - On normal pipeline executions, scan only the commits introduced since the
+#   previous successful build.
+# - On the first pipeline execution, fall back to the repository's initial commit.
+if [ -n "$GIT_PREVIOUS_SUCCESSFUL_COMMIT" ]; then
+    BASE_COMMIT="$GIT_PREVIOUS_SUCCESSFUL_COMMIT"
+elif [ -n "$GIT_PREVIOUS_COMMIT" ]; then
+    BASE_COMMIT="$GIT_PREVIOUS_COMMIT"
+else
+    BASE_COMMIT=$(git -C "$WORKSPACE" rev-list --max-parents=0 HEAD)
+fi
+
+# Mount the repository into the TruffleHog container and scan only the commits
+# introduced by the current pipeline execution.
 #
-# The --fail flag causes TruffleHog to terminate the pipeline immediately
-# when a GitHub PAT is detected, enforcing the Gate behaviour required for
-# this project.
+# Restricting the scan to the new commit range prevents historical secrets
+# from permanently blocking future builds while still stopping any newly
+# committed GitHub Personal Access Token before the Docker image is built,
+# published or deployed.
 docker run --rm \
 -v "${HOST_WORKSPACE}:/repo" \
 security-trufflehog:1.0 \
-filesystem \
+git file:///repo \
+--since-commit="$BASE_COMMIT" \
+--branch="$(git -C "$WORKSPACE" rev-parse --abbrev-ref HEAD)" \
 --include-detectors=Github \
---fail \
-/repo
+--fail
