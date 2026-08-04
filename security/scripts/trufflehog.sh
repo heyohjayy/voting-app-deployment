@@ -6,20 +6,24 @@
 # published or deployed.
 set -e
 
-# Jenkins automatically provides the WORKSPACE environment variable.
-# Mount the repository into the container and scan the Git history for
-# hard-coded GitHub Personal Access Tokens (PATs).
+# Jenkins provides the WORKSPACE environment variable inside the Jenkins
+# container. Because Docker commands are executed through the host Docker
+# daemon, the Jenkins workspace must be referenced using its corresponding
+# Docker volume path on the host.
+HOST_WORKSPACE="/var/lib/docker/volumes/jenkins_home/_data/workspace/$(basename "$WORKSPACE")"
+
+# Mount the repository into the container and scan the repository filesystem
+# for hard-coded GitHub Personal Access Tokens (PATs).
+#
+# The --include-detectors flag restricts the scan to GitHub tokens only,
+# avoiding unrelated findings from the sample application and third-party
+# dependencies.
 #
 # The --fail flag causes TruffleHog to terminate the pipeline immediately
-# when a GitHub PAT is detected, enforcing the Gate behaviour required
-# for this project.
-#
-# TruffleHog supports many other secret detectors (AWS, Slack, Azure, etc.),
-# but this implementation intentionally enables only the GitHub detector to
-# demonstrate secret detection while avoiding unrelated findings from the
-# sample application and third-party dependencies.
+# when a GitHub PAT is detected, enforcing the Gate behaviour required for
+# this project.
 docker run --rm \
--v "$WORKSPACE:/repo" \
+-v "${HOST_WORKSPACE}:/repo" \
 security-trufflehog:1.0 \
 filesystem \
 --include-detectors=Github \
