@@ -883,10 +883,10 @@ set -e
 docker run --rm \
 -v "$WORKSPACE:/repo" \
 security-trufflehog:1.0 \
-git \
+filesystem \
 --include-detectors=Github \
 --fail \
-file:///repo
+/repo
 ```
 
 </details>
