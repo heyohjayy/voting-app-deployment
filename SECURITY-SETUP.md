@@ -652,7 +652,7 @@ vi Dockerfile.trufflehog
 <summary><strong>Dockerfile.trufflehog</strong></summary>
 
 ```dockerfile
-FROM trufflesecurity/trufflehog:latest
+FROM trufflesecurity/trufflehog:latest@sha256:aa821cf4ace8861c7d096d83818cdf7bb9719028a52d37a52eaad44086a52577
 
 WORKDIR /workspace
 
@@ -671,7 +671,7 @@ vi Dockerfile.gitleaks
 <summary><strong>Dockerfile.gitleaks</strong></summary>
 
 ```dockerfile
-FROM ghcr.io/gitleaks/gitleaks:latest
+FROM ghcr.io/gitleaks/gitleaks:latest@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
 
 WORKDIR /workspace
 
@@ -690,7 +690,7 @@ vi Dockerfile.hadolint
 <summary><strong>Dockerfile.hadolint</strong></summary>
 
 ```dockerfile
-FROM hadolint/hadolint:latest
+FROM hadolint/hadolint:latest@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d
 
 WORKDIR /workspace
 
@@ -709,7 +709,7 @@ vi Dockerfile.dependency-audit
 <summary><strong>Dockerfile.dependency-audit</strong></summary>
 
 ```dockerfile
-FROM mcr.microsoft.com/dotnet/sdk:8.0
+FROM mcr.microsoft.com/dotnet/sdk:8.0@sha256:3c0edbfe1549dd93fb789dc96299a40df865ad7bffefcaf38e8c05940686d641
 
 RUN apt-get update && \
     apt-get install -y curl python3 python3-pip && \
@@ -736,7 +736,7 @@ vi Dockerfile.semgrep
 <summary><strong>Dockerfile.semgrep</strong></summary>
 
 ```dockerfile
-FROM semgrep/semgrep:latest
+FROM semgrep/semgrep:latest@sha256:bdf7013b2c3634a487671158da77c554f531742326b543a9464d2adf6c433ac8
 
 WORKDIR /workspace
 
@@ -755,11 +755,27 @@ vi Dockerfile.trivy
 <summary><strong>Dockerfile.trivy</strong></summary>
 
 ```dockerfile
-FROM aquasec/trivy:latest
+FROM aquasec/trivy:latest@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c
 
 WORKDIR /workspace
 
 ENTRYPOINT ["trivy"]
+```
+
+**Note:** All security tool Dockerfiles use digest-pinned base images (`image@sha256`) rather than mutable tags. Pinning each base image to its SHA-256 digest ensures that every pipeline builds from the exact same verified image, improving build reproducibility, supply chain integrity, and compliance with DevSecOps best practices.
+
+To retrieve the immutable SHA-256 digest for a Docker image, pull the image and inspect its repository digest:
+
+```bash
+docker pull <image>:<tag>
+docker image inspect <image>:<tag> --format='{{index .RepoDigests 0}}'
+ ```
+
+For example:
+
+```bash
+docker pull python:3.11-slim
+docker image inspect python:3.11-slim --format='{{index .RepoDigests 0}}'
 ```
 
 </details>
@@ -1253,7 +1269,7 @@ Confirm that:
 
 ## 23. Validate Security Gates and Rollback
 
-Deliberately introduce a temporary GitHub Personal Access Token into the repository to verify that the security controls prevent insecure code from progressing through the pipeline.
+Deliberately introduce a temporary GitHub Personal Access Token into a new commit to verify that the security gate prevents newly committed secrets from progressing through the CI/CD pipeline. TruffleHog scans only the commit range introduced by the current build, allowing historical test commits to remain in the repository without permanently blocking future deployments once the secret has been removed.
 
 Create a temporary test file.
 
@@ -1285,10 +1301,10 @@ The GitHub webhook automatically triggers the Jenkins pipeline.
 
 Confirm that:
 
-- TruffleHog immediately detects the verified secret.
-- The pipeline stops before the Docker image is published.
-- No new Docker image is pushed to Docker Hub.
-- No new deployment is performed.
+- TruffleHog detects the GitHub Personal Access Token introduced in the current commit.
+- The pipeline fails immediately during the Secret Scan (TruffleHog) stage.
+- No Docker image is built, published or deployed.
+- Slack reports a failed pipeline execution.
 - The application continues running the previously deployed version, confirming that the rollback mechanism preserves the last known working deployment.
 
 To verify this:
@@ -1299,6 +1315,7 @@ To verify this:
 - Confirm that no new image tag has been added to the corresponding Docker Hub repository.
 
 ![Failed Pipeline](security/screenshots/18-failed-pipeline.png)
+![Failed Pipeline Details](security/screenshots/19-failed-pipeline-details.png)
 
 Remove the temporary test file.
 
@@ -1326,10 +1343,13 @@ git push origin feature/voting-app-cicd
 
 Confirm that:
 
-- All security stages complete successfully.
+- TruffleHog successfully scans the new commit range and finds no secrets.
+- All remaining security stages complete successfully.
 - The Docker image is published successfully.
-- The application is deployed successfully.
+- The Docker image is built and published successfully.
 - Slack reports a successful pipeline execution.
+
+
 
 To verify this:
 
@@ -1338,11 +1358,13 @@ To verify this:
 - Open the deployed application and confirm that the latest changes are available.
 - Verify that Slack received a successful build notification for the completed pipeline.
 
-![Successful Pipeline](security/screenshots/19-successful-pipeline.png)
+![Successful Pipeline](security/screenshots/20-successful-pipeline.png)
 
 > **Note:**
 >
 > If a real GitHub Personal Access Token was used during validation, revoke or rotate it immediately after completing the security gate test. Never reuse credentials that have intentionally been exposed during testing.
+>
+> This project configures TruffleHog to scan only the commit range introduced by the current Jenkins build. This prevents previously removed test secrets from permanently blocking future deployments while ensuring that every newly committed secret immediately fails the pipeline before any Docker image is built, published or deployed.
 
 ## 24. Verify Docker Hub and Slack
 
@@ -1350,9 +1372,21 @@ Open Docker Hub.
 
 Navigate to your repositories and verify that Docker images are published only after every **Gate** stage completes successfully.
 
-Confirm that each successful pipeline publishes a newly tagged Docker image.
+Obtain the latest Git commit SHA.
 
-![Docker Hub Repositories](security/screenshots/20-dockerhub-images.png)
+```bash
+git rev-parse --short HEAD
+```
+
+Open the **Tags** tab for the corresponding Docker Hub repository.
+
+Verify that:
+
+- The latest Docker image tag matches the latest Git commit SHA.
+- The image was published only after the successful Jenkins pipeline completed.
+- Previous image tags remain available, confirming that each successful build is versioned instead of replacing earlier images.
+
+![Docker Hub Repositories](security/screenshots/21-dockerhub-images.png)
 
 Open the **#jenkins-builds** Slack channel.
 
@@ -1366,6 +1400,6 @@ Confirm that each notification includes:
 - Branch name
 - Build URL
 
-![Slack Notifications](security/screenshots/21-slack-notifications.png)
+![Slack Notifications](security/screenshots/22-slack-notifications.png)
 
 </details>

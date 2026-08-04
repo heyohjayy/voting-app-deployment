@@ -41,7 +41,6 @@ voting-app-deployment/
 ├── screenshots/
 ├── security/
 │   ├── baselines/
-│   ├── configs/
 │   ├── dockerfiles/
 │   ├── reports/
 │   ├── screenshots/
