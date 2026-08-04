@@ -1,5 +1,7 @@
 pipeline {
-    agent any
+    agent {
+    label 'docker-builder'
+}
 
     // Environment variables used throughout the pipeline.
     environment {
