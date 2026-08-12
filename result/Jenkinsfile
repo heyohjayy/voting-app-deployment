@@ -1,0 +1,181 @@
+pipeline {
+    agent {
+    label 'docker-builder'
+}
+
+    // Environment variables used throughout the pipeline.
+    environment {
+        IMAGE_NAME = "ohjayy/result"
+        SERVICE = "result"
+        SLACK_CHANNEL = "#jenkins-builds"
+    }
+
+    stages {
+
+        // Retrieve the latest source code from GitHub.
+        stage('Checkout Source') {
+            steps {
+                checkout scm
+            }
+        }
+
+        // Scan the repository for verified secrets.
+        // TruffleHog acts as a Gate and immediately stops
+        // the pipeline if a verified secret is detected.
+        stage('Secret Scan (TruffleHog)') {
+            steps {
+                sh 'bash security/scripts/trufflehog.sh'
+            }
+        }
+
+        // Scan the repository for potential hardcoded secrets.
+        // GitLeaks is configured as a Signal for this project.
+        stage('Secret Scan (GitLeaks)') {
+            steps {
+                sh 'bash security/scripts/gitleaks.sh'
+            }
+        }
+
+        // Lint the Result Dockerfile against Docker best practices.
+        stage('Dockerfile Lint (Hadolint)') {
+    environment {
+        SERVICE = 'result'
+    }
+    steps {
+        sh 'bash security/scripts/hadolint.sh'
+    }
+}
+
+        // Audit application dependencies for known vulnerabilities.
+        // This stage functions as a Signal for this learning project.
+        stage('Dependency Audit') {
+    environment {
+        SERVICE = 'result'
+    }
+    steps {
+        sh 'bash security/scripts/dependency-audit.sh'
+    }
+}
+
+        // Perform Static Application Security Testing (SAST).
+        stage('Static Code Analysis (Semgrep)') {
+            steps {
+                sh 'bash security/scripts/semgrep.sh'
+            }
+        }
+
+        // Retrieve the short Git commit SHA for image versioning.
+        stage('Get Git Commit SHA') {
+            steps {
+                script {
+                    env.COMMIT_SHA = sh(
+                        script: 'git rev-parse --short HEAD',
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Commit SHA: ${env.COMMIT_SHA}"
+                }
+            }
+        }
+
+        // Build the Result Docker image.
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker compose -f result/docker-compose.yml build'
+            }
+        }
+
+        // Tag the image with the current Git commit SHA.
+        stage('Tag Docker Image') {
+            steps {
+                sh """
+                docker tag ${IMAGE_NAME}:latest ${IMAGE_NAME}:${COMMIT_SHA}
+                """
+            }
+        }
+
+        // Scan the newly-built Docker image for vulnerabilities.
+        // Trivy acts as a Gate and prevents vulnerable images
+        // from being pushed to Docker Hub.
+        stage('Image Vulnerability Scan (Trivy)') {
+            steps {
+                withEnv(["IMAGE_NAME=${IMAGE_NAME}:${COMMIT_SHA}"]) {
+                    sh 'bash security/scripts/trivy.sh'
+                }
+            }
+        }
+
+        // Log in to Docker Hub using Jenkins credentials.
+        stage('Docker Hub Login') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-credentials',
+                    usernameVariable: 'DOCKER_USERNAME',
+                    passwordVariable: 'DOCKER_PASSWORD'
+                )]) {
+                    sh '''
+                    echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+                    '''
+                }
+            }
+        }
+
+        // Push the tagged image to Docker Hub.
+        stage('Push Docker Image') {
+            steps {
+                sh """
+                docker push ${IMAGE_NAME}:${COMMIT_SHA}
+                """
+            }
+        }
+
+        // Log out of Docker Hub.
+        stage('Docker Hub Logout') {
+            steps {
+                sh 'docker logout'
+            }
+        }
+
+        // Deploy the Result service.
+        stage('Deploy Result Service') {
+            steps {
+                sh 'bash deploy/result.sh'
+            }
+        }
+    }
+
+    post {
+
+        // Always execute at the end of the pipeline.
+        always {
+            echo "Pipeline execution completed."
+        }
+
+        // Notify Slack when the pipeline succeeds.
+        success {
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'good',
+                message: "✅ *SUCCESS* - ${env.JOB_NAME} #${env.BUILD_NUMBER}\nRepository: ${env.JOB_NAME}\nBranch: ${env.BRANCH_NAME}\nBuild URL: ${env.BUILD_URL}"
+            )
+        }
+
+        // Notify Slack when the pipeline fails.
+        failure {
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'danger',
+                message: "❌ *FAILED* - ${env.JOB_NAME} #${env.BUILD_NUMBER}\nRepository: ${env.JOB_NAME}\nBranch: ${env.BRANCH_NAME}\nBuild URL: ${env.BUILD_URL}"
+            )
+        }
+
+        // Notify Slack when the pipeline is aborted.
+        aborted {
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'warning',
+                message: "⚠️ *ABORTED* - ${env.JOB_NAME} #${env.BUILD_NUMBER}"
+            )
+        }
+    }
+}

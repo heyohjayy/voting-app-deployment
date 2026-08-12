@@ -1,0 +1,11 @@
+services:
+  worker:
+    build:
+      context: .
+    image: ohjayy/worker:latest
+    container_name: worker
+
+networks:
+  default:
+    name: tenet
+    external: true

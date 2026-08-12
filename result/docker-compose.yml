@@ -1,0 +1,13 @@
+services:
+  result:
+    build:
+      context: .
+    image: ohjayy/result:latest
+    container_name: result
+    ports:
+      - "8081:80"
+
+networks:
+  default:
+    name: tenet
+    external: true
